@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="description" content="Everstone Digital — lead pipeline, meetings and follow-ups."/>
+<meta name="theme-color" content="#17658A" media="(prefers-color-scheme: light)"/>
+<meta name="theme-color" content="#0A1117" media="(prefers-color-scheme: dark)"/>
+<title>Everstone Lead Tracker</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png"/>
+<link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png"/>
+<link rel="manifest" href="site.webmanifest"/>
+<meta name="apple-mobile-web-app-title" content="Everstone Leads"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<link rel="stylesheet" href="assets/css/app.css"/>
+</head>
+<body>
+
+<!-- ═══ ICON SPRITE ═══ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="i-base" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></g>
+  </defs>
+  <symbol id="ic-today" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="ic-leads" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></symbol>
+  <symbol id="ic-pipeline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="11" rx="1"/><rect x="17" y="4" width="4" height="14" rx="1"/></symbol>
+  <symbol id="ic-followup" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M9 15l2 2 4-4"/></symbol>
+  <symbol id="ic-meetings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="3.5"/><path d="M22 20v-2a4 4 0 0 0-3-3.87M16.5 3.6a4 4 0 0 1 0 6.8"/></symbol>
+  <symbol id="ic-analytics" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></symbol>
+  <symbol id="ic-messages" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 14a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="ic-docs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="ic-ai" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 4h6M9 14h.01M15 14h.01"/></symbol>
+  <symbol id="ic-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"/></symbol>
+  <symbol id="ic-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 15a1.7 1.7 0 0 0-1.5-1H1a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 3 8.6a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 8.6 3 1.7 1.7 0 0 0 10 1.5V1a2 2 0 1 1 4 0v.1A1.7 1.7 0 0 0 16.9 3a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1A1.7 1.7 0 0 0 22.5 10H23a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="ic-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="ic-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></symbol>
+  <symbol id="ic-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
+  <symbol id="ic-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l6 6L20 6"/></symbol>
+  <symbol id="ic-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="ic-grip" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></symbol>
+  <symbol id="ic-sync" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4v6h-6"/><path d="M3 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L21 8M21 15a9 9 0 0 1-14.9 3.4L3 16"/></symbol>
+  <symbol id="ic-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></symbol>
+  <symbol id="ic-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 7l10 6 10-6"/></symbol>
+  <symbol id="ic-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.8a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.8 2.1z"/></symbol>
+  <symbol id="ic-wa" viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 14.4c-.3-.2-1.8-.9-2-1-.3-.1-.5-.2-.7.1-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6l.5-.5c.1-.2.2-.3.3-.5 0-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1 2.8 1.2 3c.1.2 2 3.1 5 4.3.7.3 1.2.5 1.6.6.7.2 1.3.2 1.8.1.6-.1 1.8-.7 2-1.4.3-.7.3-1.3.2-1.4-.1-.1-.3-.2-.6-.3zM12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2z"/></symbol>
+  <symbol id="ic-star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.9 5.9 6.6 1-4.8 4.6 1.2 6.5L12 17.4 6.1 20.5l1.2-6.5L2.5 9.4l6.6-1z"/></symbol>
+  <symbol id="ic-star-o" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.2l2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17.1l-5.4 2.9 1-6.1L3.2 9.6l6.1-.9z"/></symbol>
+  <symbol id="ic-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></symbol>
+  <symbol id="ic-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+  <symbol id="ic-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7L12.2 19"/></symbol>
+  <symbol id="ic-tg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.6 0 12 0zm5.6 8.2l-2 9.3c-.1.7-.5.8-1.1.5l-3-2.2-1.4 1.4c-.2.2-.3.3-.6.3l.2-3 5.6-5c.2-.2-.1-.3-.4-.1l-6.9 4.3-3-.9c-.6-.2-.6-.6.1-1L17 7.3c.5-.2 1 .1.6.9z"/></symbol>
+  <symbol id="ic-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></symbol>
+  <symbol id="ic-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.5L12.5 21a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2L9.9 18.4a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8"/></symbol>
+  <symbol id="ic-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3L3 10.5l7 3 3 7z"/><path d="M21 3l-11 11"/></symbol>
+  <symbol id="ic-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h11a6 6 0 1 1 0 12H8"/><path d="M3 8l4-4M3 8l4 4"/></symbol>
+  <symbol id="ic-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="ic-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9.5 17h-19z"/><path d="M12 9v5M12 17.5h.01"/></symbol>
+  <symbol id="ic-doc-add" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8"/><path d="M14 3v5h5M18 2v6M15 5h6"/></symbol>
+  <symbol id="ic-notes" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M15 3v5h5M8 12h7M8 16h5"/></symbol>
+  <symbol id="ic-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="ic-pin" viewBox="0 0 24 24" fill="currentColor"><path d="M9 2h6a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1v4.6l2.7 3.1a1 1 0 0 1-.8 1.7H13v6.1a1 1 0 0 1-2 0V14.4H7.1a1 1 0 0 1-.8-1.7L9 9.6V5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/></symbol>
+  <symbol id="ic-pin-o" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v2h-1v5l2.8 3.4H7.2L10 10V5H9z"/><path d="M12 14v6"/></symbol>
+  <symbol id="ic-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.1 0-1 .8-1.7 1.7-1.7H16a5 5 0 0 0 5-5c0-4-4-7.3-9-7.3z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor" stroke="none"/><circle cx="10.5" cy="7" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="17.5" cy="11" r="1.2" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="ic-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></symbol>
+  <symbol id="ic-checklist" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l2 2 3-3M3 14l2 2 3-3M12 7h9M12 15h9"/></symbol>
+  <symbol id="ic-merge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 21V9a4 4 0 0 1 4-4h2"/><path d="M17 21V9a4 4 0 0 0-4-4h-2"/><path d="M10 8 13 5l-3-3"/></symbol>
+  <symbol id="ic-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></symbol>
+  <symbol id="ic-tasks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 10l2.5 2.5L16 7"/><path d="M8 16h8"/></symbol>
+  <symbol id="ic-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+</svg>
+
+<!-- ═══ LOGIN ═══ -->
+<div class="gate" id="gate" hidden>
+  <div class="gate-box">
+    <img class="gate-logo on-light" src="assets/img/logo.png" alt="Everstone Digital"/>
+    <img class="gate-logo on-dark" src="assets/img/logo-white.png" alt="Everstone Digital"/>
+    <h1>Lead Tracker</h1>
+    <p>Private pipeline. Sign in to continue.</p>
+    <div id="googleBtn" style="display:flex;justify-content:center"></div>
+    <div class="gate-or" id="gateOr" hidden>or</div>
+    <div class="col">
+      <input class="input" id="gatePw" type="password" placeholder="Password" autocomplete="current-password"/>
+      <button class="btn btn-primary" id="gateSubmit" style="width:100%">Unlock</button>
+    </div>
+    <div class="gate-err" id="gateErr" role="alert"></div>
+    <button class="btn btn-ghost btn-sm" id="gateSetup" style="margin-top:8px">Change backend URL</button>
+  </div>
+</div>
+
+<!-- ═══ APP ═══ -->
+<div class="app" id="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-mark on-light" src="assets/img/mark.png" alt="Everstone Digital"/>
+      <img class="brand-mark on-dark" src="assets/img/mark-white.png" alt="Everstone Digital"/>
+      <div class="brand-name">Everstone <span>Leads</span></div>
+    </div>
+
+    <div class="recent-strip" id="recentStrip"></div>
+    <div class="topbar-spacer"></div>
+
+    <div class="sync" id="syncBadge" title="Sync status">
+      <span class="sync-dot" id="syncDot"></span>
+      <span id="syncText">Ready</span>
+    </div>
+    <button class="btn btn-ghost btn-icon" id="btnUndo" title="Undo (Ctrl+Z)" disabled><svg><use href="#ic-undo"/></svg></button>
+    <button class="btn btn-ghost btn-icon" id="btnSearch" title="Search (Ctrl+K)"><svg><use href="#ic-search"/></svg></button>
+    <button class="btn btn-ghost btn-icon" id="btnSync" title="Sync now"><svg><use href="#ic-sync"/></svg></button>
+    <button class="btn btn-ghost btn-icon" id="btnTheme" title="Light / dark">🌙</button>
+    <button class="btn btn-primary" id="btnAddLead"><svg><use href="#ic-plus"/></svg><span class="label">Add lead</span></button>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar" id="sidebar">
+      <div class="nav-group">Work</div>
+      <button class="nav-item active" data-page="today"><span class="ico"><svg width="16" height="16"><use href="#ic-today"/></svg></span><span class="label">Today</span><span class="badge" id="nb-today">0</span></button>
+      <button class="nav-item" data-page="leads"><span class="ico"><svg width="16" height="16"><use href="#ic-leads"/></svg></span><span class="label">Leads</span><span class="badge" id="nb-leads">0</span></button>
+      <button class="nav-item" data-page="pipeline"><span class="ico"><svg width="16" height="16"><use href="#ic-pipeline"/></svg></span><span class="label">Pipeline</span></button>
+      <button class="nav-item" data-page="followups"><span class="ico"><svg width="16" height="16"><use href="#ic-followup"/></svg></span><span class="label">Follow-ups</span><span class="badge" id="nb-followups">0</span></button>
+      <button class="nav-item" data-page="meetings"><span class="ico"><svg width="16" height="16"><use href="#ic-meetings"/></svg></span><span class="label">Meetings</span><span class="badge" id="nb-meetings">0</span></button>
+      <button class="nav-item" data-page="notes"><span class="ico"><svg width="16" height="16"><use href="#ic-notes"/></svg></span><span class="label">Notes</span><span class="badge" id="nb-notes">0</span></button>
+
+      <div class="nav-group">Insight</div>
+      <button class="nav-item" data-page="history"><span class="ico"><svg width="16" height="16"><use href="#ic-history"/></svg></span><span class="label">History</span></button>
+      <button class="nav-item" data-page="analytics"><span class="ico"><svg width="16" height="16"><use href="#ic-analytics"/></svg></span><span class="label">Analytics</span></button>
+      <button class="nav-item" data-page="ai"><span class="ico"><svg width="16" height="16"><use href="#ic-ai"/></svg></span><span class="label">Evo AI</span></button>
+
+      <div class="nav-group">Library</div>
+      <button class="nav-item" data-page="messages"><span class="ico"><svg width="16" height="16"><use href="#ic-messages"/></svg></span><span class="label">Messages</span></button>
+      <button class="nav-item" data-page="docs"><span class="ico"><svg width="16" height="16"><use href="#ic-docs"/></svg></span><span class="label">Documents</span><span class="badge" id="nb-docs">0</span></button>
+      <button class="nav-item" data-page="archive"><span class="ico"><svg width="16" height="16"><use href="#ic-archive"/></svg></span><span class="label">Archive</span><span class="badge" id="nb-archive">0</span></button>
+
+      <div style="flex:1"></div>
+      <button class="nav-item" data-page="settings"><span class="ico"><svg width="16" height="16"><use href="#ic-settings"/></svg></span><span class="label">Settings</span></button>
+    </nav>
+
+    <main class="content">
+
+      <!-- TODAY -->
+      <section class="page active" id="page-today">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title" id="todayGreeting">Today</h1>
+            <p class="page-sub" id="todaySub"></p>
+          </div>
+          <div class="page-actions">
+            <button class="btn" id="btnBriefTg"><svg><use href="#ic-tg"/></svg>Send me the brief</button>
+          </div>
+        </div>
+        <div class="flow-wrap" id="flowWrap">
+          <div class="flow-strip" id="flowStrip"></div>
+          <button class="flow-config" id="btnFlowConfig" title="Choose what this strip tracks"><svg width="14" height="14"><use href="#ic-settings"/></svg></button>
+        </div>
+        <div class="stat-grid" id="todayStats"></div>
+        <div id="todayBoard"></div>
+      </section>
+
+      <!-- LEADS -->
+      <section class="page" id="page-leads">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Leads</h1>
+            <p class="page-sub" id="leadsSub"></p>
+          </div>
+          <div class="page-actions">
+            <button class="btn" id="btnFindDupes"><svg><use href="#ic-merge"/></svg>Duplicates</button>
+            <button class="btn" id="btnExportCsv"><svg><use href="#ic-download"/></svg>Export CSV</button>
+            <button class="btn btn-primary" id="btnAddLead2"><svg><use href="#ic-plus"/></svg>Add lead</button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="search-wrap">
+            <svg class="search-ico"><use href="#ic-search"/></svg>
+            <input class="input" id="fSearch" type="search" placeholder="Search name, phone, site, notes…"/>
+          </div>
+          <select class="select" id="fStage"><option value="">All stages</option></select>
+          <select class="select" id="fPriority"><option value="">All priorities</option></select>
+          <select class="select" id="fSource"><option value="">All sources</option></select>
+          <select class="select" id="fLabel"><option value="">All labels</option></select>
+          <select class="select" id="fHealth">
+            <option value="">Any health</option>
+            <option value="open">Open only (hide closed)</option>
+            <option value="due">Due or overdue</option>
+            <option value="nonext">No next step</option>
+            <option value="warn">Going quiet</option>
+            <option value="stale">Gone cold</option>
+            <option value="starred">Starred</option>
+            <option value="proposal">Proposal out</option>
+            <option value="contacted">Contacted at least once</option>
+            <option value="untouched">Never contacted</option>
+          </select>
+          <select class="select" id="fSort">
+            <option value="smart">Sort: what needs me</option>
+            <option value="updated">Sort: recently touched</option>
+            <option value="created">Sort: newest</option>
+            <option value="followup">Sort: follow-up date</option>
+            <option value="value">Sort: deal value</option>
+            <option value="name">Sort: A–Z</option>
+            <option value="touched">Sort: most contacted</option>
+            <option value="manual">Sort: my own order</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" id="btnClearFilters">Clear</button>
+        </div>
+
+        <div class="pill-row" id="stagePills" style="margin-bottom:12px"></div>
+        <div class="reorder-hint" id="reorderHint" hidden></div>
+        <div class="lead-list" id="leadsList"></div>
+      </section>
+
+      <!-- PIPELINE -->
+      <section class="page" id="page-pipeline">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Pipeline</h1>
+            <p class="page-sub" id="pipelineSub"></p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-sm" id="btnSelectAllKanban">Select visible</button>
+            <button class="btn btn-sm" id="btnClearSelection">Clear selection</button>
+          </div>
+        </div>
+        <div class="kanban" id="kanban"></div>
+        <div class="card" style="margin-top:16px">
+          <div class="card-head"><div class="card-title">Recent stage moves</div></div>
+          <div class="card-body" id="stageHistory"></div>
+        </div>
+      </section>
+
+      <!-- FOLLOW-UPS -->
+      <section class="page" id="page-followups">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Follow-ups</h1>
+            <p class="page-sub" id="followSub"></p>
+          </div>
+          <div class="page-actions">
+            <select class="select" id="fuRange" style="width:auto">
+              <option value="14">Next 14 days</option>
+              <option value="30" selected>Next 30 days</option>
+              <option value="90">Next 90 days</option>
+            </select>
+          </div>
+        </div>
+        <div id="followTimeline"></div>
+      </section>
+
+      <!-- MEETINGS -->
+      <section class="page" id="page-meetings">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Meetings &amp; proposals</h1>
+            <p class="page-sub" id="meetSub"></p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-primary" id="btnAddMeeting"><svg><use href="#ic-plus"/></svg>Schedule meeting</button>
+          </div>
+        </div>
+        <div class="pill-row" id="meetFilters" style="margin-bottom:14px"></div>
+        <div id="meetingsList"></div>
+      </section>
+
+      <!-- ANALYTICS -->
+      <section class="page" id="page-analytics">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Analytics</h1>
+            <p class="page-sub">Leading indicators first — those are the ones you can still change.</p>
+          </div>
+        </div>
+        <div class="stat-grid" id="analyticsStats"></div>
+        <div class="chart-grid" id="analyticsCharts"></div>
+      </section>
+
+      <!-- AI -->
+      <section class="page" id="page-ai">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Evo</h1>
+            <p class="page-sub" id="aiSub">Knows your whole pipeline. Ask in Bangla or English.</p>
+          </div>
+          <div class="page-actions">
+            <select class="select" id="aiModelPick" style="width:auto" title="Which model answers">
+              <option value="fast">Fast model</option>
+              <option value="power">Power model</option>
+            </select>
+            <button class="btn" id="btnAiInstructions">Custom instructions</button>
+          </div>
+        </div>
+        <div class="ai-shell">
+          <aside class="ai-side">
+            <div class="ai-side-head">
+              <button class="btn btn-primary btn-sm" id="btnNewChat" style="width:100%"><svg><use href="#ic-plus"/></svg>New chat</button>
+            </div>
+            <div class="ai-chats" id="aiChatList"></div>
+          </aside>
+          <div class="ai-main">
+            <div class="ai-thread" id="aiThread"></div>
+            <div class="ai-compose">
+              <div class="ai-suggestions" id="aiSuggestions"></div>
+              <div class="ai-attachments" id="aiAttachments"></div>
+              <div class="ai-inputrow">
+                <button class="btn btn-icon" id="btnAiAttach" title="Attach image or file"><svg><use href="#ic-paperclip"/></svg></button>
+                <input type="file" id="aiFileInput" hidden multiple accept="image/*,.txt,.csv,.md,.json,.html"/>
+                <textarea class="textarea" id="aiInput" rows="1" placeholder="Ask anything, or tell Evo what to do…"></textarea>
+                <button class="btn btn-primary btn-icon" id="btnAiSend" title="Send"><svg><use href="#ic-send"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- MESSAGES -->
+      <section class="page" id="page-messages">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Messages</h1>
+            <p class="page-sub">English templates ready to copy, send or mail. Pick a lead to fill in the blanks.</p>
+          </div>
+          <div class="page-actions">
+            <select class="select" id="tplLead" style="width:auto;max-width:220px"><option value="">No lead selected</option></select>
+          </div>
+        </div>
+        <div id="templateList"></div>
+      </section>
+
+      <!-- DOCS -->
+      <section class="page" id="page-docs">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Documents</h1>
+            <p class="page-sub" id="docsSub"></p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-primary" id="btnAddDoc"><svg><use href="#ic-doc-add"/></svg>Add document</button>
+          </div>
+        </div>
+        <div id="docsList"></div>
+      </section>
+
+      <!-- ARCHIVE -->
+      <section class="page" id="page-archive">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Archive</h1>
+            <p class="page-sub">Closed and deleted leads. Nothing here is gone — restore anything.</p>
+          </div>
+        </div>
+        <div class="pill-row" id="archiveFilters" style="margin-bottom:14px"></div>
+        <div class="lead-list" id="archiveList"></div>
+      </section>
+
+      <!-- NOTES -->
+      <section class="page" id="page-notes">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Notes</h1>
+            <p class="page-sub" id="notesSub"></p>
+          </div>
+          <div class="page-actions">
+            <button class="btn" id="btnNoteList" title="Switch between grid and list"><svg><use href="#ic-leads"/></svg>View</button>
+            <button class="btn btn-primary" id="btnAddNote"><svg><use href="#ic-plus"/></svg>New note</button>
+          </div>
+        </div>
+
+        <div class="notes-tabs" id="notesTabs"></div>
+
+        <div class="toolbar">
+          <div class="search-wrap">
+            <svg class="search-ico"><use href="#ic-search"/></svg>
+            <input class="input" id="noteSearch" type="search" placeholder="Search notes and tasks…"/>
+          </div>
+          <select class="select" id="noteLabelFilter" style="width:auto"><option value="">All labels</option></select>
+          <button class="btn btn-ghost btn-sm" id="btnNoteClear">Clear</button>
+        </div>
+
+        <div class="note-composer" id="noteComposer">
+          <input class="note-comp-input" id="noteQuick" placeholder="Take a note…"/>
+          <div class="row" style="gap:4px">
+            <button class="btn btn-ghost btn-icon btn-sm" id="btnQuickList" title="New checklist"><svg><use href="#ic-checklist"/></svg></button>
+            <button class="btn btn-ghost btn-icon btn-sm" id="btnQuickTask" title="New task"><svg><use href="#ic-tasks"/></svg></button>
+          </div>
+        </div>
+
+        <div id="notesBody"></div>
+      </section>
+
+      <!-- HISTORY -->
+      <section class="page" id="page-history">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">History</h1>
+            <p class="page-sub" id="historySub">Every change, who made it, and what it used to say.</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn" id="btnHistoryExport"><svg><use href="#ic-download"/></svg>Export CSV</button>
+            <button class="btn" id="btnHistoryRefresh"><svg><use href="#ic-sync"/></svg>Refresh</button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="search-wrap">
+            <svg class="search-ico"><use href="#ic-search"/></svg>
+            <input class="input" id="hSearch" type="search" placeholder="Search a lead, a value, anything…"/>
+          </div>
+          <select class="select" id="hLead" style="max-width:200px"><option value="">All leads</option></select>
+          <select class="select" id="hType"><option value="">All kinds</option></select>
+          <select class="select" id="hField"><option value="">All fields</option></select>
+          <select class="select" id="hActor"><option value="">Anyone</option></select>
+          <input class="input" id="hFrom" type="date" style="width:auto" title="From"/>
+          <input class="input" id="hTo" type="date" style="width:auto" title="To"/>
+          <button class="btn btn-ghost btn-sm" id="btnHistoryClear">Clear</button>
+        </div>
+
+        <div class="pill-row" id="historyFacets" style="margin-bottom:12px"></div>
+        <div id="historyBody"></div>
+        <div class="row" style="justify-content:center;margin:18px 0">
+          <button class="btn" id="btnHistoryMore" hidden>Load more</button>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="page" id="page-settings">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Settings</h1>
+            <p class="page-sub">Everything here is shared with the sheet, so it follows you to any device.</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn" id="btnBackupNow">Back up now</button>
+            <button class="btn btn-primary" id="btnSaveSettings">Save settings</button>
+          </div>
+        </div>
+        <div id="settingsBody"></div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ═══ BULK ACTION BAR ═══ -->
+<div class="bulkbar" id="bulkbar">
+  <span class="bb-count" id="bulkCount">0 selected</span>
+  <select class="select" id="bulkStage"><option value="">Move to stage…</option></select>
+  <select class="select" id="bulkPriority"><option value="">Set priority…</option></select>
+  <button class="btn btn-sm" id="bulkFollowup">Set follow-up</button>
+  <button class="btn btn-sm" id="bulkStar">Star</button>
+  <button class="btn btn-sm" id="bulkArchive">Archive</button>
+  <button class="btn btn-sm btn-icon" id="bulkClose" title="Clear"><svg><use href="#ic-x"/></svg></button>
+</div>
+
+<!-- ═══ LEAD DRAWER ═══ -->
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Lead detail">
+  <div class="drawer-head">
+    <div class="grow" style="min-width:0">
+      <div class="drawer-title" id="drawerTitle">—</div>
+      <div class="drawer-sub" id="drawerSub"></div>
+    </div>
+    <div class="row" style="flex-wrap:nowrap">
+      <button class="btn btn-ghost btn-icon btn-sm" id="drawerStar" title="Star"><svg><use href="#ic-star-o"/></svg></button>
+      <button class="btn btn-ghost btn-icon btn-sm" id="drawerShare" title="Share"><svg><use href="#ic-share"/></svg></button>
+      <button class="btn btn-ghost btn-icon btn-sm" id="drawerClose" title="Close"><svg><use href="#ic-x"/></svg></button>
+    </div>
+  </div>
+  <div class="drawer-tabs">
+    <button class="drawer-tab active" data-tab="overview">Overview</button>
+    <button class="drawer-tab" data-tab="activity">Activity</button>
+    <button class="drawer-tab" data-tab="timeline">Timeline</button>
+    <button class="drawer-tab" data-tab="meetings">Meetings</button>
+    <button class="drawer-tab" data-tab="docs">Docs</button>
+    <button class="drawer-tab" data-tab="evo">Ask Evo</button>
+  </div>
+  <div class="drawer-body">
+    <div class="drawer-pane active" id="pane-overview"></div>
+    <div class="drawer-pane" id="pane-activity"></div>
+    <div class="drawer-pane" id="pane-timeline"></div>
+    <div class="drawer-pane" id="pane-meetings"></div>
+    <div class="drawer-pane" id="pane-docs"></div>
+    <div class="drawer-pane" id="pane-evo"></div>
+  </div>
+</aside>
+
+<!-- ═══ MODALS ═══ -->
+<div class="modal" id="modal">
+  <div class="modal-box" id="modalBox">
+    <div class="modal-head">
+      <div class="modal-title" id="modalTitle">—</div>
+      <button class="btn btn-ghost btn-icon btn-sm" id="modalClose"><svg><use href="#ic-x"/></svg></button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot" id="modalFoot"></div>
+  </div>
+</div>
+
+<!-- ═══ COMMAND PALETTE ═══ -->
+<div class="cmdk" id="cmdk">
+  <div class="cmdk-box">
+    <input class="input cmdk-input" id="cmdkInput" placeholder="Jump to a lead, or type a command…" autocomplete="off"/>
+    <div class="cmdk-list" id="cmdkList"></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+<audio id="alarmAudio" preload="auto"></audio>
+
+<script src="assets/js/core.js"></script>
+<script src="assets/js/views.js"></script>
+<script src="assets/js/ai.js"></script>
+<script src="assets/js/main.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</body>
+</html>
