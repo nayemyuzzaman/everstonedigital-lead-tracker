@@ -865,3 +865,314 @@ input, textarea, select { -webkit-user-drag: none; }
   .sidebar, .topbar, .toasts, .bulkbar, .page-actions { display: none !important; }
   .content { padding: 0; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v6 — flow strip, notes, history, drag handles
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── recent strip: several leads, newest work first ──────────────────────── */
+.recent-strip { overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
+.recent-strip::-webkit-scrollbar { display: none; }
+.recent-pill.is-new { border-color: var(--good); }
+.recent-pill .rp-when { flex-shrink: 0; }
+
+/* ─── flow strip: what has actually happened, by interaction ──────────────── */
+.flow-wrap { position: relative; margin-bottom: 14px; }
+.flow-strip {
+  display: flex; gap: 8px; overflow-x: auto; padding: 2px 40px 6px 2px;
+  scrollbar-width: thin;
+}
+.flow-strip::-webkit-scrollbar { height: 6px; }
+.flow-strip::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
+
+.flow-card {
+  position: relative; flex: 0 0 auto; min-width: 132px;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 9px 12px 9px 13px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-left: 3px solid var(--fc, var(--accent));
+  border-radius: var(--r); cursor: pointer;
+  box-shadow: var(--shadow-1); transition: box-shadow .12s, transform .12s, opacity .12s;
+}
+.flow-card:hover { box-shadow: var(--shadow-2); }
+.flow-card.active { background: var(--accent-soft); border-color: var(--accent); }
+.flow-card.dragging { opacity: .4; }
+.flow-card.drop-target { outline: 2px dashed var(--accent); outline-offset: 2px; }
+.fc-label {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--ink-3); white-space: nowrap;
+}
+.fc-value { font-size: 21px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; color: var(--fc, var(--ink)); }
+.fc-note { font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+.fc-grip {
+  position: absolute; top: 4px; right: 4px; opacity: 0;
+  color: var(--ink-4); cursor: grab; padding: 2px; line-height: 0;
+}
+.flow-card:hover .fc-grip { opacity: .7; }
+.flow-config {
+  position: absolute; top: 4px; right: 0;
+  width: 30px; height: 30px; border-radius: var(--r-sm);
+  display: grid; place-items: center;
+  background: var(--surface); border: 1px solid var(--line);
+  color: var(--ink-3); cursor: pointer;
+}
+.flow-config:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ─── lead row drag handle ────────────────────────────────────────────────── */
+.lead-lead { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.lead-grip {
+  color: var(--ink-4); cursor: grab; line-height: 0; padding: 1px;
+  opacity: 0; transition: opacity .12s;
+}
+.lead-row:hover .lead-grip { opacity: .75; }
+.lead-grip:active { cursor: grabbing; }
+.lead-row.dragging { opacity: .35; }
+.lead-row.drop-above { box-shadow: 0 -3px 0 -1px var(--accent); }
+.lead-row.drop-below { box-shadow: 0 3px 0 -1px var(--accent); }
+.reorder-hint {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  font-size: 12px; color: var(--ink-3);
+}
+
+/* ─── notes: a Keep-style board that lives in the sheet ───────────────────── */
+.notes-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+
+.note-composer {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: 6px 8px 6px 14px;
+  box-shadow: var(--shadow-1); margin-bottom: 16px; max-width: 620px;
+}
+.note-comp-input {
+  flex: 1; border: 0; background: none; outline: none;
+  font: inherit; font-size: 14px; color: var(--ink); padding: 8px 0;
+}
+.note-comp-input::placeholder { color: var(--ink-4); }
+
+.notes-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  align-items: start;
+}
+.notes-grid.as-list { grid-template-columns: 1fr; }
+.notes-section-label {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-4); margin: 4px 0 10px;
+}
+
+.note-card {
+  position: relative; display: flex; flex-direction: column; gap: 7px;
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 13px 14px 8px; cursor: pointer;
+  background: var(--note-bg, var(--surface));
+  box-shadow: var(--shadow-1); transition: box-shadow .12s, opacity .12s;
+  /* Notes carry their own colour, so ink has to be pinned to something that
+     stays readable on a pale yellow card in dark mode too. */
+  color: var(--note-ink, var(--ink));
+}
+.note-card:hover { box-shadow: var(--shadow-2); }
+.note-card.dragging { opacity: .35; }
+.note-card.drop-target { outline: 2px dashed var(--accent); outline-offset: 2px; }
+.note-title { font-size: 14px; font-weight: 660; letter-spacing: -.01em; word-break: break-word; }
+.note-body {
+  font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+  color: var(--note-ink-2, var(--ink-2)); max-height: 260px; overflow: hidden;
+}
+.note-check-list { display: flex; flex-direction: column; gap: 5px; }
+.note-check {
+  display: flex; align-items: flex-start; gap: 7px;
+  font-size: 13px; line-height: 1.5;
+}
+.note-check .nc-box {
+  width: 15px; height: 15px; flex-shrink: 0; margin-top: 2px;
+  border: 1.5px solid var(--line-2); border-radius: 4px;
+  display: grid; place-items: center; background: var(--surface);
+}
+.note-check.on .nc-box { background: var(--accent); border-color: var(--accent); color: #fff; }
+.note-check.on .nc-text { text-decoration: line-through; opacity: .55; }
+.note-check svg { width: 9px; height: 9px; }
+.note-more { font-size: 11.5px; color: var(--ink-3); }
+
+.note-labels { display: flex; flex-wrap: wrap; gap: 4px; }
+.note-foot {
+  display: flex; align-items: center; gap: 2px;
+  margin-top: 2px; padding-top: 5px; min-height: 30px;
+}
+.note-when { font-size: 10.5px; color: var(--ink-4); font-family: var(--mono); margin-right: auto; }
+.note-btn {
+  width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; color: var(--ink-3);
+  cursor: pointer; opacity: 0; transition: opacity .12s, background .12s;
+}
+.note-card:hover .note-btn, .note-card:focus-within .note-btn { opacity: 1; }
+.note-btn:hover { background: rgba(127, 145, 155, .18); color: var(--ink); }
+.note-btn.on { opacity: 1; color: var(--accent); }
+.note-btn svg { width: 13px; height: 13px; }
+.note-pin {
+  position: absolute; top: 8px; right: 8px;
+  color: var(--accent); opacity: .85;
+}
+.note-reminder {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; padding: 2px 8px; border-radius: 99px;
+  background: rgba(127, 145, 155, .16); color: var(--ink-2); width: fit-content;
+}
+.note-reminder.due { background: var(--hot-soft); color: var(--hot); }
+
+.color-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.color-dot {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1.5px solid var(--line-2); cursor: pointer;
+}
+.color-dot.on { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ─── tasks ───────────────────────────────────────────────────────────────── */
+.task-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border: 1px solid var(--line);
+  border-radius: var(--r); background: var(--surface); margin-bottom: 6px;
+}
+.task-row.done { opacity: .55; }
+.task-row.done .task-text { text-decoration: line-through; }
+.task-text { flex: 1; font-size: 13.5px; min-width: 0; }
+.task-due { font-size: 11px; font-family: var(--mono); color: var(--ink-3); }
+.task-due.over { color: var(--hot); }
+.task-due.today { color: var(--warm); }
+
+/* ─── history ─────────────────────────────────────────────────────────────── */
+.hist-day-label {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 2px; margin-top: 10px;
+  background: var(--ground);
+  font-family: var(--mono); font-size: 10px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.hist-day-label::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+.hist-row {
+  display: grid; grid-template-columns: 58px 20px 1fr auto;
+  gap: 10px; align-items: start;
+  padding: 9px 12px; border: 1px solid var(--line);
+  border-radius: var(--r); background: var(--surface); margin-bottom: 5px;
+}
+.hist-row:hover { border-color: var(--line-2); }
+.hist-row.undone { opacity: .5; }
+.hist-time { font-family: var(--mono); font-size: 11px; color: var(--ink-4); padding-top: 2px; }
+.hist-icon {
+  width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center; flex-shrink: 0;
+  background: var(--surface-2); color: var(--ink-3);
+}
+.hist-icon svg { width: 11px; height: 11px; }
+.hist-icon.created { background: var(--good-soft); color: var(--good); }
+.hist-icon.stage { background: var(--info-soft); color: var(--info); }
+.hist-icon.deleted { background: var(--hot-soft); color: var(--hot); }
+.hist-icon.evo { background: var(--accent-soft); color: var(--accent); }
+.hist-icon.touch { background: var(--warm-soft); color: var(--warm); }
+.hist-body { min-width: 0; }
+.hist-head { font-size: 13px; font-weight: 560; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.hist-lead { color: var(--accent); cursor: pointer; font-weight: 660; }
+.hist-diff {
+  display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+  font-size: 12px; margin-top: 3px; color: var(--ink-2);
+}
+.hist-old, .hist-new {
+  padding: 1px 7px; border-radius: var(--r-sm);
+  font-family: var(--mono); font-size: 11px;
+  max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.hist-old { background: var(--hot-soft); color: var(--hot); text-decoration: line-through; }
+.hist-new { background: var(--good-soft); color: var(--good); }
+.hist-actions { display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+.hist-row:hover .hist-actions { opacity: 1; }
+.hist-empty { padding: 30px; text-align: center; color: var(--ink-3); }
+
+/* ─── duplicates ──────────────────────────────────────────────────────────── */
+.dup-group {
+  border: 1px solid var(--warm); border-radius: var(--r-lg);
+  background: var(--surface); padding: 12px 14px; margin-bottom: 10px;
+}
+.dup-head { display: flex; align-items: center; gap: 8px; font-weight: 620; font-size: 13.5px; margin-bottom: 8px; }
+.dup-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: var(--r-sm); background: var(--surface-2);
+  margin-bottom: 5px; font-size: 13px;
+}
+.dup-item.keep { background: var(--good-soft); }
+
+/* ─── lead timeline in the drawer ─────────────────────────────────────────── */
+.tline { display: flex; flex-direction: column; gap: 0; }
+.tline-item { display: grid; grid-template-columns: 22px 1fr; gap: 10px; }
+.tline-rail { display: flex; flex-direction: column; align-items: center; }
+.tline-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--accent); margin-top: 5px; flex-shrink: 0;
+}
+.tline-line { width: 2px; flex: 1; background: var(--line); min-height: 12px; }
+.tline-body { padding-bottom: 14px; min-width: 0; }
+.tline-title { font-size: 13px; font-weight: 600; }
+.tline-meta { font-size: 11.5px; color: var(--ink-3); margin-top: 1px; }
+
+.count-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.count-pill {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 99px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  font-size: 12px; font-weight: 560;
+}
+.count-pill b { font-size: 13px; }
+
+@media (max-width: 820px) {
+  .lead-row { grid-template-columns: 26px 1fr; }
+  .hist-row { grid-template-columns: 48px 20px 1fr; }
+  .hist-actions { grid-column: 1 / -1; opacity: 1; }
+  .notes-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 560px) {
+  .notes-grid { grid-template-columns: 1fr; }
+}
+
+/* ─── header layout fixes ─────────────────────────────────────────────────── */
+/* The brand must not be squeezed by the recent strip; the strip takes what is
+   left and scrolls inside itself. */
+.topbar .brand { flex: 0 0 auto; }
+.topbar .recent-strip { flex: 1 1 auto; min-width: 0; max-width: 54vw; }
+.topbar .topbar-spacer { flex: 0 0 8px; }
+.topbar .sync, .topbar .btn { flex-shrink: 0; }
+
+/* A hidden bulk bar was still peeking a few pixels above the bottom edge,
+   because translateY(120%) is 120% of its own height, not of the gap below it. */
+.bulkbar { opacity: 0; visibility: hidden; transform: translateX(-50%) translateY(calc(100% + 30px)); }
+.bulkbar.show { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
+
+@media (max-width: 1100px) {
+  .topbar .recent-strip { max-width: 38vw; }
+}
+@media (max-width: 760px) {
+  .topbar .recent-strip { display: none; }
+}
+
+/* ─── note cards keep their own ink, including the small print ────────────── */
+/* A pale yellow card in dark mode still needs dark text on everything, not
+   just the body — the timestamps and chips were disappearing into it. */
+.note-card .note-when,
+.note-card .note-more { color: var(--note-ink-3, var(--ink-4)); }
+.note-card[style*="--note-ink"] .note-when,
+.note-card[style*="--note-ink"] .note-more { color: #6B7683; }
+.note-card[style*="--note-ink"] .note-reminder { background: rgba(0, 0, 0, .07); color: #3A4653; }
+.note-card[style*="--note-ink"] .nc-box { background: rgba(255, 255, 255, .85); border-color: rgba(0, 0, 0, .22); }
+.note-card[style*="--note-ink"] .note-btn { color: #5A6673; }
+.note-card[style*="--note-ink"] .note-btn:hover { background: rgba(0, 0, 0, .08); color: #1A2430; }
+.note-card[style*="--note-ink"] .chip-ghost { background: rgba(0, 0, 0, .07); color: #3A4653; }
+.note-title { padding-right: 22px; }
+.note-pin svg { width: 13px; height: 13px; }
+
+/* Touch screens have no hover, so the card controls must simply be there. */
+@media (hover: none) {
+  .note-btn, .lead-grip, .fc-grip, .hist-actions, .lead-actions { opacity: 1 !important; }
+}
+/* the ticked state has to survive the coloured-card overrides above */
+.note-card[style*="--note-ink"] .note-check.on .nc-box {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}

@@ -59,8 +59,13 @@ function renderChrome() {
   setBadge('nb-followups', due.length, due.length > 0);
   setBadge('nb-meetings', upcomingMeets.length + needOutcome.length, needOutcome.length > 0);
   setBadge('nb-docs', State.docs.length, false);
+  var liveNotes = (State.notes || []).filter(function (n) { return !n.archived; }).length;
+  var openTasks = (State.tasks || []).filter(function (t) { return !t.done; }).length;
+  setBadge('nb-notes', liveNotes + openTasks, (State.tasks || []).some(function (t) {
+    return !t.done && t.due && t.due <= Dates.today();
+  }));
   setBadge('nb-archive', State.leads.filter(function (l) {
-    return l.status === 'deleted' || isClosed(l);
+    return l.status !== 'merged' && (l.status === 'deleted' || isClosed(l));
   }).length, false);
 
   renderRecentStrip();
@@ -76,35 +81,57 @@ function setBadge(id, value, alert) {
   el.style.display = value ? '' : 'none';
 }
 
-/** Two entry points into recent work: what you just added, what you just touched. */
+/**
+ * The strip along the top of the header: the leads worked on most recently,
+ * newest first, each stamped with when. Glancing at it should answer "who was
+ * I just dealing with" without opening anything.
+ */
 function renderRecentStrip() {
   var wrap = $('#recentStrip');
   if (!wrap) return;
 
-  var active = activeLeads();
-  var newest = active.slice().sort(function (a, b) {
+  var limit = Number(State.settings.recentLimit) || 8;
+  var list = recentlyWorked(limit);
+  if (!list.length) { wrap.innerHTML = ''; return; }
+
+  var newestId = activeLeads().slice().sort(function (a, b) {
     return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
   })[0];
-  var touched = active.slice().sort(function (a, b) {
-    return String(b.lastActivityAt || b.updatedAt || '').localeCompare(String(a.lastActivityAt || a.updatedAt || ''));
-  })[0];
+  newestId = newestId ? newestId.id : '';
 
   var out = ['<span class="recent-label">Recent</span>'];
-
-  function pill(lead, label) {
-    if (!lead) return '';
+  list.forEach(function (lead) {
     var m = priorityMeta(lead.priority);
-    return '<button class="recent-pill" data-act="open-lead" data-id="' + esc(lead.id) + '" title="' + esc(label + ': ' + lead.name) + '">' +
+    var when = lead.lastActivityAt || lead.updatedAt || lead.createdAt;
+    var isNew = lead.id === newestId && Dates.daysSince(lead.createdAt) !== null && Dates.daysSince(lead.createdAt) < 2;
+    out.push(
+      '<button class="recent-pill' + (isNew ? ' is-new' : '') + '" data-act="open-lead" data-id="' + esc(lead.id) + '"' +
+      ' title="' + esc((lead.name || 'Lead') + ' — ' + Fmt.date(when) + ' · ' + Fmt.ago(when)) + '">' +
       '<span class="rp-dot" style="background:' + esc(m.color) + '"></span>' +
       '<span class="rp-name truncate">' + esc(lead.name || 'Untitled') + '</span>' +
-      '<span class="rp-when">' + esc(label === 'Added' ? 'new' : Fmt.ago(lead.lastActivityAt || lead.updatedAt)) + '</span>' +
-      '</button>';
-  }
-
-  out.push(pill(touched, 'Touched'));
-  if (newest && (!touched || newest.id !== touched.id)) out.push(pill(newest, 'Added'));
+      '<span class="rp-when">' + esc(recentStamp(when)) + '</span>' +
+      '</button>'
+    );
+  });
 
   wrap.innerHTML = out.join('');
+}
+
+/** Today and yesterday read better as words; anything older wants a date. */
+function recentStamp(iso) {
+  if (!iso) return '—';
+  var d = new Date(iso);
+  if (isNaN(d)) return '—';
+  var day = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  var today = Dates.today();
+  if (day === today) {
+    var mins = Math.floor((Date.now() - d.getTime()) / 60000);
+    if (mins < 1) return 'now';
+    if (mins < 60) return mins + 'm';
+    return Math.floor(mins / 60) + 'h';
+  }
+  if (day === Dates.addDays(today, -1)) return 'yest';
+  return Fmt.shortDate(day);
 }
 
 /* ─── TODAY ─────────────────────────────────────────────────────────────── */
@@ -130,6 +157,8 @@ function renderToday() {
       ? due.length + ' follow-up' + (due.length > 1 ? 's' : '') + ' waiting' + (meetsToday.length ? ' · ' + meetsToday.length + ' meeting' + (meetsToday.length > 1 ? 's' : '') + ' today' : '')
       : 'Nothing overdue. ' + open.length + ' leads open.';
   }
+
+  renderFlowStrip();
 
   var stats = $('#todayStats');
   if (stats) {
@@ -226,10 +255,10 @@ function filteredLeads() {
   var f = State.ui.filters;
   var q = f.search.trim().toLowerCase();
   var list = activeLeads().filter(function (l) {
-    if (isClosed(l) && f.stage !== l.stage) {
-      // closed leads live in Archive unless explicitly filtered for
-      if (f.health !== 'starred' && !f.stage) return false;
-    }
+    // Closed leads are shown, not hidden — they just sink. Dead sits at the
+    // very bottom, Maybe Not Potential just above it, which is the order Nayem
+    // asked for. "Open only" is one click away when the list gets long.
+    if (f.health === 'open' && isClosed(l)) return false;
     if (q) {
       var hay = (l.name + ' ' + l.site + ' ' + l.phone + ' ' + l.wa + ' ' + l.email + ' ' +
         l.contact + ' ' + l.notes + ' ' + l.service + ' ' + (l.labels || []).join(' ')).toLowerCase();
@@ -246,15 +275,27 @@ function filteredLeads() {
     if (f.health === 'stale' && rotState(l) !== 'stale') return false;
     if (f.health === 'starred' && !l.star) return false;
     if (f.health === 'proposal' && !(l.stage === 'Proposal' && l.proposalSentAt)) return false;
+    if (f.health === 'contacted' && !(leadCounts(l).total > 0)) return false;
+    if (f.health === 'untouched' && leadCounts(l).total > 0) return false;
     return true;
   });
 
   var sort = f.sort;
+
+  // Manual order is exactly what was dragged — no clever re-ranking on top of
+  // it, otherwise dragging a row looks broken the moment you let go.
+  if (sort === 'manual') {
+    list.sort(manualCompare);
+    return list;
+  }
+
   list.sort(function (a, b) {
-    // Dead and Hired always sink, whatever the sort.
-    var ac = isClosed(a) ? 1 : 0, bc = isClosed(b) ? 1 : 0;
-    if (ac !== bc) return ac - bc;
-    if (a.star !== b.star) return a.star ? -1 : 1;
+    // The bands Nayem asked for: everything live first, then Maybe Not
+    // Potential and N/A, then Dead right at the bottom — whatever the sort.
+    var sa = bandRank(a.stage) >= 2 ? bandRank(a.stage) : 0;
+    var sb = bandRank(b.stage) >= 2 ? bandRank(b.stage) : 0;
+    if (sa !== sb) return sa - sb;
+    if (!!a.star !== !!b.star) return a.star ? -1 : 1;
 
     switch (sort) {
       case 'updated': return String(b.lastActivityAt || '').localeCompare(String(a.lastActivityAt || ''));
@@ -265,7 +306,8 @@ function filteredLeads() {
         return a.followup.localeCompare(b.followup);
       case 'value': return (Number(b.value) || 0) - (Number(a.value) || 0);
       case 'name': return String(a.name || '').localeCompare(String(b.name || ''));
-      default: return attentionScore(b) - attentionScore(a);
+      case 'touched': return (leadCounts(b).total || 0) - (leadCounts(a).total || 0);
+      default: return smartCompare(a, b);
     }
   });
   return list;
@@ -278,7 +320,9 @@ function renderLeads() {
   var sub = $('#leadsSub');
   if (sub) {
     var open = openLeads();
-    sub.textContent = list.length + ' shown · ' + open.length + ' open · ' +
+    var closedShown = list.filter(isClosed).length;
+    sub.textContent = list.length + ' shown · ' + open.length + ' open' +
+      (closedShown ? ' · ' + closedShown + ' closed at the bottom' : '') + ' · ' +
       Fmt.money(open.reduce(function (s, l) { return s + (Number(l.value) || 0); }, 0)) + ' in play';
   }
 
@@ -287,11 +331,27 @@ function renderLeads() {
     var counts = {};
     activeLeads().forEach(function (l) { counts[l.stage] = (counts[l.stage] || 0) + 1; });
     pills.innerHTML = '<button class="pill' + (State.ui.filters.stage ? '' : ' active') + '" data-act="stage-filter" data-value="">All<span class="cnt">' + activeLeads().length + '</span></button>' +
+      '<button class="pill' + (State.ui.filters.health === 'open' ? ' active' : '') + '" data-act="toggle-open-only"' +
+      ' title="Hide Hired, Dead and the rest of the closed stages">' +
+      (State.ui.filters.health === 'open' ? 'Open only' : 'Hide closed') + '</button>' +
       (State.settings.stages || []).map(function (s) {
         return '<button class="pill' + (State.ui.filters.stage === s.name ? ' active' : '') + '" data-act="stage-filter" data-value="' + esc(s.name) + '">' +
           '<span class="chip-dot" style="background:' + esc(s.color) + '"></span>' + esc(s.name) +
           '<span class="cnt">' + (counts[s.name] || 0) + '</span></button>';
       }).join('');
+  }
+
+  var hint = $('#reorderHint');
+  if (hint) {
+    if (State.ui.filters.sort === 'manual') {
+      hint.hidden = false;
+      hint.innerHTML = icon('grip', 13) +
+        '<span>Showing <b>your own order</b> — drag any row by its handle to move it.</span>' +
+        '<button class="btn btn-sm" data-act="sort-smart">Back to smart order</button>';
+    } else {
+      hint.hidden = true;
+      hint.innerHTML = '';
+    }
   }
 
   var host = $('#leadsList');
@@ -316,8 +376,11 @@ function leadRow(l) {
   return '<article class="lead-row' + (selected ? ' selected' : '') + (isClosed(l) ? ' is-closed' : '') + '"' +
     ' style="--row-accent:' + esc(pm.color) + '" data-act="open-lead" data-id="' + esc(l.id) + '">' +
 
-    '<button class="lead-check' + (selected ? ' on' : '') + '" data-act="toggle-select" data-id="' + esc(l.id) + '"' +
-    ' aria-label="Select ' + esc(l.name) + '" aria-pressed="' + selected + '">' + (selected ? icon('check', 11) : '') + '</button>' +
+    '<div class="lead-lead">' +
+      '<button class="lead-check' + (selected ? ' on' : '') + '" data-act="toggle-select" data-id="' + esc(l.id) + '"' +
+      ' aria-label="Select ' + esc(l.name) + '" aria-pressed="' + selected + '">' + (selected ? icon('check', 11) : '') + '</button>' +
+      '<span class="lead-grip" draggable="true" data-act="lgrip" data-id="' + esc(l.id) + '" title="Drag to move this lead up or down">' + icon('grip', 13) + '</span>' +
+    '</div>' +
 
     '<div class="lead-main">' +
       '<div class="lead-name">' +
@@ -344,6 +407,7 @@ function leadRow(l) {
       '</div>' +
       '<div class="signal"><span style="min-width:64px">' + esc((Number(l.editCount) || 0) + ' edits') + '</span>' +
         '<span class="tiny muted truncate">added ' + esc(Fmt.shortDate((l.createdAt || '').slice(0, 10))) + '</span></div>' +
+      (touchSummary(l) ? '<div class="signal tiny muted truncate" title="Interactions logged with this lead">' + touchSummary(l) + '</div>' : '') +
       (l.nextStep ? '<div class="signal tiny muted truncate" title="' + esc(l.nextStep) + '">→ ' + esc(l.nextStep) + '</div>' : '') +
     '</div>' +
 
@@ -867,15 +931,21 @@ function renderArchive() {
   var host = $('#archiveList');
   if (!host) return;
 
-  var deleted = State.leads.filter(function (l) { return l.status === 'deleted'; });
-  var hired = State.leads.filter(function (l) { return l.status !== 'deleted' && l.stage === 'Hired'; });
-  var dead = State.leads.filter(function (l) { return l.status !== 'deleted' && l.stage === 'Dead'; });
+  // A merged row is not archived, it no longer exists as a lead — it lives on
+  // inside the record it was folded into.
+  var live = State.leads.filter(function (l) { return l.status !== 'merged'; });
+  var won = ['Hired', 'Nayem Client'];
+  var deleted = live.filter(function (l) { return l.status === 'deleted'; });
+  var hired = live.filter(function (l) { return l.status !== 'deleted' && won.indexOf(l.stage) >= 0; });
+  var dead = live.filter(function (l) { return l.status !== 'deleted' && l.stage === 'Dead'; });
+  var merged = State.leads.filter(function (l) { return l.status === 'merged'; });
 
   var filters = [
     { key: 'all', label: 'Everything', count: deleted.length + hired.length + dead.length },
     { key: 'hired', label: 'Won', count: hired.length },
     { key: 'dead', label: 'Lost', count: dead.length },
-    { key: 'deleted', label: 'Deleted', count: deleted.length }
+    { key: 'deleted', label: 'Deleted', count: deleted.length },
+    { key: 'merged', label: 'Merged away', count: merged.length }
   ];
   var fEl = $('#archiveFilters');
   if (fEl) {
@@ -888,6 +958,7 @@ function renderArchive() {
   var show = State.ui.archiveFilter === 'hired' ? hired
     : State.ui.archiveFilter === 'dead' ? dead
     : State.ui.archiveFilter === 'deleted' ? deleted
+    : State.ui.archiveFilter === 'merged' ? merged
     : hired.concat(dead, deleted);
 
   show = show.slice().sort(function (a, b) {
@@ -921,10 +992,12 @@ function renderSettings() {
 
     chartCard('Pipeline stages',
       '<div id="stageEditor">' + (s.stages || []).map(function (st, i) {
-        return listEditorRow('stage', i, st.name, st.color);
+        return listEditorRow('stage', i, st.name, st.color, st.group);
       }).join('') + '</div>' +
       '<button class="btn btn-sm" data-act="add-stage" style="margin-top:8px">' + icon('plus', 12) + ' Add stage</button>' +
-      '<div class="tiny muted" style="margin-top:8px">Renaming a stage does not move leads. Leads already on the old name keep it until you move them.</div>') +
+      '<div class="tiny muted" style="margin-top:8px">The arrows change the order everywhere — the board, the filters and the lead form. ' +
+      '"Live" stages sort at the top, "Low priority" sinks, and "Dead" always sits at the very bottom. ' +
+      'Renaming a stage does not move leads; they keep the old name until you move them.</div>') +
 
     chartCard('Priority levels',
       '<div id="priorityEditor">' + (s.priorities || []).map(function (p, i) {
@@ -973,6 +1046,38 @@ function renderSettings() {
       '<button class="btn btn-sm" data-act="ask-notifications">Enable desktop notifications</button>' +
       '<div class="tiny muted" style="margin-top:10px">Your phone is covered by Telegram, which works whether this tab is open or not. The alarm here only fires while the dashboard is open.</div>') +
 
+    chartCard('Top strip and ordering',
+      '<div class="field"><label>Leads in the Recent strip</label>' +
+      '<input class="input" type="number" min="1" max="20" id="setRecentLimit" value="' + esc(s.recentLimit || 8) + '"/></div>' +
+      '<label class="row" style="cursor:pointer;margin:12px 0"><input type="checkbox" id="setShowFlow"' +
+      (s.showFlowStrip !== false ? ' checked' : '') + '/> <span>Show the interaction counters across the top of Today</span></label>' +
+      '<button class="btn btn-sm" data-act="open-flow-config">Choose what they count</button>' +
+      '<hr class="divider"/>' +
+      '<div class="tiny muted">Which stage counts as which interaction. Moving a lead onto one of these logs it automatically, ' +
+      'so the counters stay right even after the lead has moved on.</div>' +
+      '<div id="touchMapEditor" style="margin-top:10px">' +
+      (s.stages || []).map(function (st) {
+        var current = (s.stageTouchMap || {})[st.name] || '';
+        return '<div class="row" style="flex-wrap:nowrap;margin-bottom:5px">' +
+          '<span class="chip-dot" style="background:' + esc(st.color) + '"></span>' +
+          '<span class="truncate" style="flex:1;font-size:12.5px">' + esc(st.name) + '</span>' +
+          '<select class="select touchmap-input" data-stage="' + esc(st.name) + '" style="width:auto">' +
+          '<option value="">— nothing —</option>' +
+          (s.touchTypes || DEFAULT_SETTINGS.touchTypes).map(function (t) {
+            return '<option value="' + esc(t.key) + '"' + (current === t.key ? ' selected' : '') + '>' + esc(t.label) + '</option>';
+          }).join('') + '</select></div>';
+      }).join('') + '</div>') +
+
+    chartCard('Data safety',
+      '<div class="tiny muted" style="margin-bottom:10px">The sheet is the record. These check it and take copies of it.</div>' +
+      '<div class="row">' +
+      '<button class="btn btn-sm" data-act="verify-data">Check everything is healthy</button>' +
+      '<button class="btn btn-sm" data-act="recount-data">Recount interactions</button>' +
+      '<button class="btn btn-sm" data-act="find-dupes">Find duplicates</button>' +
+      '</div>' +
+      '<div class="tiny muted" style="margin-top:10px">Columns are matched by name, never by position, and a version upgrade copies ' +
+      'the whole spreadsheet before it adds anything. Old columns are never moved or removed.</div>') +
+
     chartCard('Connection',
       '<div class="field"><label>Apps Script web app URL</label><input class="input" id="setUrl" value="' + esc(Cfg.url) + '"/></div>' +
       '<div class="field" style="margin-top:10px"><label>Google client ID (optional)</label><input class="input" id="setClientId" value="' + esc(Cfg.clientId) + '"/></div>' +
@@ -984,10 +1089,26 @@ function renderSettings() {
     '</div>';
 }
 
-function listEditorRow(kind, index, name, color) {
+/**
+ * One editable row in Settings. Stages also carry a band, which is what decides
+ * whether they sort at the top of the list or sink to the bottom — without it
+ * a renamed stage would quietly lose its place in the order.
+ */
+function listEditorRow(kind, index, name, color, group) {
+  var bands = [['open', 'Live'], ['won', 'Signed'], ['low', 'Low priority'], ['dead', 'Dead']];
   return '<div class="row" style="margin-bottom:6px;flex-wrap:nowrap" data-kind="' + kind + '" data-index="' + index + '">' +
+    '<span class="row" style="flex-wrap:nowrap;gap:1px">' +
+      '<button class="btn btn-sm btn-icon" data-act="move-' + kind + '" data-index="' + index + '" data-dir="-1" title="Move up">▲</button>' +
+      '<button class="btn btn-sm btn-icon" data-act="move-' + kind + '" data-index="' + index + '" data-dir="1" title="Move down">▼</button>' +
+    '</span>' +
     '<input type="color" value="' + esc(color) + '" class="le-color" style="width:30px;height:30px;border:0;background:none;padding:0;cursor:pointer"/>' +
     '<input class="input le-name" value="' + esc(name) + '" style="flex:1"/>' +
+    (kind === 'stage'
+      ? '<select class="select le-group" style="width:auto" title="Where leads on this stage sort">' +
+        bands.map(function (b) {
+          return '<option value="' + b[0] + '"' + ((group || 'open') === b[0] ? ' selected' : '') + '>' + b[1] + '</option>';
+        }).join('') + '</select>'
+      : '') +
     '<button class="btn btn-sm btn-icon btn-danger" data-act="remove-' + kind + '" data-index="' + index + '" title="Remove">' + icon('x', 12) + '</button>' +
     '</div>';
 }
@@ -1030,6 +1151,7 @@ function renderDrawer() {
   });
 
   if (State.ui.detailTab === 'overview') renderDrawerOverview(l);
+  else if (State.ui.detailTab === 'timeline') renderDrawerTimeline(l);
   else if (State.ui.detailTab === 'activity') renderDrawerActivity(l);
   else if (State.ui.detailTab === 'meetings') renderDrawerMeetings(l);
   else if (State.ui.detailTab === 'docs') renderDrawerDocs(l);
@@ -1203,6 +1325,8 @@ var PAGE_RENDERERS = {
   messages: renderMessages,
   docs: renderDocs,
   archive: renderArchive,
+  notes: renderNotes,
+  history: renderHistory,
   settings: renderSettings,
   ai: function () { if (typeof renderAi === 'function') renderAi(); }
 };
@@ -1219,4 +1343,625 @@ function switchPage(page) {
   $$('.nav-item').forEach(function (b) { b.classList.toggle('active', b.dataset.page === page); });
   renderActivePage();
   try { history.replaceState(null, '', '#' + page); } catch (e) {}
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v6 — flow strip, notes, history, lead timeline
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── interaction helpers ─────────────────────────────────────────────────── */
+function touchTypeMeta(key) {
+  var list = State.settings.touchTypes || [];
+  for (var i = 0; i < list.length; i++) if (list[i].key === key) return list[i];
+  return { key: key, label: key, color: '#64748B' };
+}
+
+/**
+ * "3 calls · 1 mtg" — the short version of a lead's history.
+ * The lead row gives this about 170px, so the words are abbreviated rather
+ * than left to be cut off mid-syllable by the ellipsis.
+ */
+var TOUCH_SHORT = {
+  call: 'call', meeting: 'mtg', proposal: 'prop', message: 'msg',
+  email: 'mail', audit: 'audit', negotiation: 'nego', visit: 'visit', note: 'note'
+};
+function touchSummary(lead, full) {
+  var c = leadCounts(lead);
+  var bits = [];
+  ['call', 'meeting', 'proposal', 'message', 'email', 'audit', 'visit'].forEach(function (k) {
+    if (!c[k]) return;
+    var word = full ? touchTypeMeta(k).label.toLowerCase() : TOUCH_SHORT[k];
+    bits.push(c[k] + ' ' + word + (c[k] > 1 ? 's' : ''));
+  });
+  if (!full && bits.length > 3) bits = bits.slice(0, 3).concat(['+' + (bits.length - 3)]);
+  return bits.length ? esc(bits.join(' · ')) : '';
+}
+
+/** Leads that have ever been in one of these stages, however long ago. */
+function leadsEverInStages(stages) {
+  var want = {};
+  (stages || []).forEach(function (s) { want[s] = true; });
+  var hit = {};
+  (State.stageEvents || []).forEach(function (e) {
+    if (want[e.toStage]) hit[e.leadId] = true;
+  });
+  activeLeads().forEach(function (l) {
+    if (want[l.stage]) hit[l.id] = true;
+    String(l.stagePath || '').split('>').forEach(function (s) { if (want[s]) hit[l.id] = true; });
+    (l.stagesVisited || []).forEach(function (s) { if (want[s]) hit[l.id] = true; });
+  });
+  return Object.keys(hit).filter(function (id) { return !!getLead(id); });
+}
+
+/**
+ * Turns one configured card into the number on screen and the leads behind it.
+ *
+ * The whole point of this strip: a lead that moved New → Phone Call → Meeting
+ * → Proposal used to leave no trace of the call or the meeting once it had
+ * moved on. Counting the interaction ledger, not the current stage, keeps
+ * "who have I actually met" answerable months later.
+ */
+function flowCardData(card) {
+  var live = activeLeads();
+  var liveIds = {};
+  live.forEach(function (l) { liveIds[l.id] = true; });
+
+  if (card.kind === 'touch') {
+    var events = (State.touches || []).filter(function (t) {
+      return t.type === card.value && liveIds[t.leadId];
+    });
+    var ids = {};
+    events.forEach(function (t) { ids[t.leadId] = true; });
+    var leadIds = Object.keys(ids);
+    return {
+      value: events.length,
+      note: leadIds.length + ' lead' + (leadIds.length === 1 ? '' : 's'),
+      leadIds: leadIds
+    };
+  }
+
+  if (card.kind === 'stage') {
+    var want = {};
+    (card.value || []).forEach(function (x) { want[x] = true; });
+    var inStage = live.filter(function (l) { return want[l.stage]; });
+    var sum = inStage.reduce(function (t, l) { return t + (Number(l.value) || 0); }, 0);
+    return {
+      value: inStage.length,
+      note: sum ? Fmt.compactMoney(sum) + ' in play' : 'right now',
+      leadIds: inStage.map(function (l) { return l.id; })
+    };
+  }
+
+  if (card.kind === 'passed') {
+    var ever = leadsEverInStages(card.value || []);
+    return { value: ever.length, note: 'at any point', leadIds: ever };
+  }
+
+  if (card.kind === 'metric') {
+    if (card.value === 'pipelineValue') {
+      var open = openLeads();
+      return {
+        value: Fmt.compactMoney(open.reduce(function (t, l) { return t + (Number(l.value) || 0); }, 0)),
+        note: open.length + ' live leads',
+        leadIds: open.map(function (l) { return l.id; })
+      };
+    }
+    if (card.value === 'touchedLeads') {
+      var ids2 = {};
+      (State.touches || []).forEach(function (t) { if (liveIds[t.leadId]) ids2[t.leadId] = true; });
+      var k = Object.keys(ids2);
+      return { value: k.length, note: 'have been contacted', leadIds: k };
+    }
+  }
+
+  return { value: 0, note: '', leadIds: [] };
+}
+
+function renderFlowStrip() {
+  var strip = $('#flowStrip');
+  var wrap = $('#flowWrap');
+  if (!strip || !wrap) return;
+
+  if (State.settings.showFlowStrip === false) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = '';
+
+  var cards = (State.settings.flowCards || DEFAULT_SETTINGS.flowCards).filter(function (c) { return c.show !== false; });
+  if (!cards.length) {
+    strip.innerHTML = '<div class="tiny muted" style="padding:10px 2px">' +
+      'Nothing tracked yet — press the cog to choose what this strip counts.</div>';
+    return;
+  }
+
+  strip.innerHTML = cards.map(function (c) {
+    var d = flowCardData(c);
+    return '<div class="flow-card" style="--fc:' + esc(c.color || 'var(--accent)') + '"' +
+      ' data-act="flow-open" data-id="' + esc(c.id) + '" title="' + esc(c.label) + ' — click to see which leads">' +
+      '<span class="fc-grip" draggable="true" data-act="fgrip" data-id="' + esc(c.id) + '" title="Drag to reorder">' + icon('grip', 12) + '</span>' +
+      '<div class="fc-label">' + esc(c.label) + '</div>' +
+      '<div class="fc-value">' + esc(d.value) + '</div>' +
+      '<div class="fc-note">' + esc(d.note) + '</div>' +
+      '</div>';
+  }).join('');
+}
+
+/* ─── NOTES ───────────────────────────────────────────────────────────────── */
+function noteInk(color) {
+  // Note colours are fixed pale swatches. On a pale card the theme's ink is
+  // unreadable in dark mode, so anything other than plain white pins its own.
+  return (!color || color.toUpperCase() === '#FFFFFF') ? '' : '#1A2430';
+}
+
+function visibleNotes() {
+  var q = String(State.ui.notesSearch || '').toLowerCase().trim();
+  var label = State.ui.notesLabel;
+  var wantArchived = State.ui.notesTab === 'archive';
+
+  return (State.notes || []).filter(function (n) {
+    if (!!n.archived !== wantArchived) return false;
+    if (label && (n.labels || []).indexOf(label) < 0) return false;
+    if (q) {
+      var hay = (n.title + ' ' + n.body + ' ' + (n.labels || []).join(' ') + ' ' +
+        (n.checklist || []).map(function (c) { return c.text; }).join(' ')).toLowerCase();
+      if (hay.indexOf(q) < 0) return false;
+    }
+    return true;
+  }).sort(function (a, b) {
+    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+    var sa = Number(a.sortOrder || 0), sb = Number(b.sortOrder || 0);
+    if (sa !== sb) return sa - sb;
+    return String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
+  });
+}
+
+function visibleTasks() {
+  var q = String(State.ui.notesSearch || '').toLowerCase().trim();
+  return (State.tasks || []).filter(function (t) {
+    if (q && String(t.text || '').toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  }).sort(function (a, b) {
+    if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+    var da = a.due || '9999-12-31', db = b.due || '9999-12-31';
+    if (da !== db) return da.localeCompare(db);
+    return Number(a.sortOrder || 0) - Number(b.sortOrder || 0);
+  });
+}
+
+function renderNotes() {
+  var tabsEl = $('#notesTabs');
+  var notes = State.notes || [];
+  var tasks = State.tasks || [];
+
+  var tabs = [
+    { key: 'notes', label: 'Notes', count: notes.filter(function (n) { return !n.archived; }).length },
+    { key: 'tasks', label: 'Tasks', count: tasks.filter(function (t) { return !t.done; }).length },
+    { key: 'reminders', label: 'Reminders', count: notes.filter(function (n) { return n.reminderAt && !n.archived; }).length },
+    { key: 'archive', label: 'Archived', count: notes.filter(function (n) { return n.archived; }).length }
+  ];
+  if (tabsEl) {
+    tabsEl.innerHTML = tabs.map(function (t) {
+      return '<button class="pill' + (State.ui.notesTab === t.key ? ' active' : '') + '"' +
+        ' data-act="notes-tab" data-value="' + t.key + '">' + esc(t.label) +
+        '<span class="cnt">' + t.count + '</span></button>';
+    }).join('');
+  }
+
+  var labelSel = $('#noteLabelFilter');
+  if (labelSel) {
+    var allLabels = {};
+    notes.forEach(function (n) { (n.labels || []).forEach(function (l) { allLabels[l] = true; }); });
+    fillSelect('#noteLabelFilter', 'All labels', Object.keys(allLabels).sort(), State.ui.notesLabel);
+  }
+
+  var sub = $('#notesSub');
+  if (sub) {
+    var due = tasks.filter(function (t) { return !t.done && t.due && t.due <= Dates.today(); }).length;
+    sub.textContent = notes.filter(function (n) { return !n.archived; }).length + ' notes · ' +
+      tasks.filter(function (t) { return !t.done; }).length + ' open tasks' +
+      (due ? ' · ' + due + ' due now' : '');
+  }
+
+  var host = $('#notesBody');
+  if (!host) return;
+
+  var composer = $('#noteComposer');
+  if (composer) composer.style.display = (State.ui.notesTab === 'archive') ? 'none' : '';
+  var quick = $('#noteQuick');
+  if (quick) {
+    // The same box adds a note or a task depending on the tab, so it has to say so.
+    quick.placeholder = State.ui.notesTab === 'tasks' ? 'Add a task…' : 'Take a note…';
+  }
+
+  if (State.ui.notesTab === 'tasks') { host.innerHTML = renderTaskList(); return; }
+  if (State.ui.notesTab === 'reminders') { host.innerHTML = renderReminderList(); return; }
+
+  var list = visibleNotes();
+  if (!list.length) {
+    host.innerHTML = emptyState(
+      State.ui.notesTab === 'archive' ? 'Nothing archived' : 'No notes yet',
+      State.ui.notesTab === 'archive'
+        ? 'Notes you archive land here and stay searchable.'
+        : 'Anything you want to keep — a phone script, bank details, what a client said on a call.',
+      State.ui.notesTab === 'archive' ? '' : '<button class="btn btn-primary" data-act="new-note">Write your first note</button>');
+    return;
+  }
+
+  var pinned = list.filter(function (n) { return n.pinned; });
+  var rest = list.filter(function (n) { return !n.pinned; });
+  var cls = 'notes-grid' + (State.ui.notesView === 'list' ? ' as-list' : '');
+
+  host.innerHTML =
+    (pinned.length ? '<div class="notes-section-label">Pinned</div><div class="' + cls + '" data-notegrid="1">' +
+      pinned.map(noteCard).join('') + '</div>' : '') +
+    (rest.length ? (pinned.length ? '<div class="notes-section-label" style="margin-top:20px">Others</div>' : '') +
+      '<div class="' + cls + '" data-notegrid="1">' + rest.map(noteCard).join('') + '</div>' : '');
+}
+
+function noteCard(n) {
+  var checklist = n.checklist || [];
+  var openItems = checklist.filter(function (c) { return !c.done; });
+  var doneItems = checklist.filter(function (c) { return c.done; });
+  var shown = openItems.concat(doneItems).slice(0, 8);
+  var ink = noteInk(n.color);
+  var lead = n.leadId ? getLead(n.leadId) : null;
+
+  var reminderCls = '';
+  if (n.reminderAt) {
+    reminderCls = new Date(n.reminderAt).getTime() <= Date.now() ? ' due' : '';
+  }
+
+  return '<article class="note-card" data-act="open-note" data-id="' + esc(n.id) + '"' +
+    ' style="--note-bg:' + esc(n.color || '#FFFFFF') + (ink ? ';--note-ink:' + ink + ';--note-ink-2:#3A4653' : '') + '">' +
+
+    (n.pinned ? '<span class="note-pin">' + icon('pin', 13) + '</span>' : '') +
+
+    (n.title ? '<div class="note-title">' + esc(n.title) + '</div>' : '') +
+
+    (checklist.length
+      ? '<div class="note-check-list">' +
+          shown.map(function (c) {
+            var idx = checklist.indexOf(c);
+            return '<div class="note-check' + (c.done ? ' on' : '') + '" data-act="note-check" data-id="' + esc(n.id) + '" data-index="' + idx + '">' +
+              '<span class="nc-box">' + (c.done ? icon('check', 9) : '') + '</span>' +
+              '<span class="nc-text">' + esc(c.text) + '</span></div>';
+          }).join('') +
+          (checklist.length > 8 ? '<div class="note-more">+' + (checklist.length - 8) + ' more</div>' : '') +
+          (doneItems.length ? '<div class="note-more">' + doneItems.length + ' of ' + checklist.length + ' done</div>' : '') +
+        '</div>'
+      : (n.body ? '<div class="note-body">' + esc(n.body) + '</div>' : '')) +
+
+    (n.reminderAt ? '<span class="note-reminder' + reminderCls + '">' + icon('bell', 11) + ' ' +
+      esc(Fmt.shortDate(String(n.reminderAt).slice(0, 10)) + ' ' + String(n.reminderAt).slice(11, 16)) + '</span>' : '') +
+
+    ((n.labels || []).length || lead
+      ? '<div class="note-labels">' +
+        (lead ? '<span class="chip chip-info">' + esc(lead.name) + '</span>' : '') +
+        (n.labels || []).map(function (l) { return '<span class="chip chip-ghost">' + esc(l) + '</span>'; }).join('') +
+        '</div>'
+      : '') +
+
+    '<div class="note-foot">' +
+      '<span class="note-when">' + esc(Fmt.ago(n.updatedAt || n.createdAt)) + '</span>' +
+      '<button class="note-btn' + (n.pinned ? ' on' : '') + '" data-act="note-pin" data-id="' + esc(n.id) + '" title="' + (n.pinned ? 'Unpin' : 'Pin to the top') + '">' + icon(n.pinned ? 'pin' : 'pin-o', 13) + '</button>' +
+      '<button class="note-btn" data-act="note-colors" data-id="' + esc(n.id) + '" title="Change colour">' + icon('palette', 13) + '</button>' +
+      '<button class="note-btn" data-act="note-remind" data-id="' + esc(n.id) + '" title="Remind me">' + icon('bell', 13) + '</button>' +
+      '<button class="note-btn" data-act="note-archive" data-id="' + esc(n.id) + '" title="' + (n.archived ? 'Put back' : 'Archive') + '">' + icon('archive', 13) + '</button>' +
+      '<button class="note-btn" data-act="note-delete" data-id="' + esc(n.id) + '" title="Delete">' + icon('trash', 13) + '</button>' +
+      '<span class="note-btn" draggable="true" data-act="ngrip" data-id="' + esc(n.id) + '" title="Drag to reorder">' + icon('grip', 13) + '</span>' +
+    '</div>' +
+  '</article>';
+}
+
+function renderTaskList() {
+  var list = visibleTasks();
+  var open = list.filter(function (t) { return !t.done; });
+  var done = list.filter(function (t) { return t.done; });
+
+  function row(t) {
+    var lead = t.leadId ? getLead(t.leadId) : null;
+    var dueCls = !t.due ? '' : t.due < Dates.today() ? ' over' : t.due === Dates.today() ? ' today' : '';
+    return '<div class="task-row' + (t.done ? ' done' : '') + '">' +
+      '<button class="lead-check' + (t.done ? ' on' : '') + '" data-act="task-toggle" data-id="' + esc(t.id) + '">' +
+      (t.done ? icon('check', 11) : '') + '</button>' +
+      '<span class="task-text editable" data-act="task-edit" data-id="' + esc(t.id) + '">' + esc(t.text || 'Untitled') + '</span>' +
+      (lead ? '<span class="chip chip-info">' + esc(lead.name) + '</span>' : '') +
+      (t.due ? '<span class="task-due' + dueCls + '">' + esc(Fmt.shortDate(t.due)) + '</span>' : '') +
+      '<button class="btn btn-sm btn-icon" data-act="task-due" data-id="' + esc(t.id) + '" title="Set a date">' + icon('followup', 12) + '</button>' +
+      '<button class="btn btn-sm btn-icon btn-danger" data-act="task-delete" data-id="' + esc(t.id) + '" title="Delete">' + icon('trash', 12) + '</button>' +
+      '</div>';
+  }
+
+  if (!list.length) {
+    return emptyState('No tasks', 'Anything that is not a lead but still has to happen.',
+      '<button class="btn btn-primary" data-act="new-task">Add a task</button>');
+  }
+
+  return (open.length ? '<div class="notes-section-label">To do</div>' + open.map(row).join('') : '') +
+    (done.length ? '<div class="notes-section-label" style="margin-top:20px">Done (' + done.length + ')</div>' +
+      done.slice(0, 40).map(row).join('') : '');
+}
+
+function renderReminderList() {
+  var withReminders = (State.notes || []).filter(function (n) { return n.reminderAt && !n.archived; })
+    .sort(function (a, b) { return String(a.reminderAt).localeCompare(String(b.reminderAt)); });
+  var tasksWithDates = (State.tasks || []).filter(function (t) { return !t.done && t.due; })
+    .sort(function (a, b) { return String(a.due).localeCompare(String(b.due)); });
+
+  if (!withReminders.length && !tasksWithDates.length) {
+    return emptyState('Nothing scheduled', 'Set a reminder on a note or a date on a task and it shows up here — and on Telegram.');
+  }
+
+  return (withReminders.length
+    ? '<div class="notes-section-label">Note reminders</div><div class="notes-grid">' +
+      withReminders.map(noteCard).join('') + '</div>'
+    : '') +
+    (tasksWithDates.length
+      ? '<div class="notes-section-label" style="margin-top:20px">Dated tasks</div>' +
+        tasksWithDates.map(function (t) {
+          var dueCls = t.due < Dates.today() ? ' over' : t.due === Dates.today() ? ' today' : '';
+          return '<div class="task-row">' +
+            '<button class="lead-check" data-act="task-toggle" data-id="' + esc(t.id) + '"></button>' +
+            '<span class="task-text">' + esc(t.text) + '</span>' +
+            '<span class="task-due' + dueCls + '">' + esc(Fmt.dayLabel(t.due)) + '</span></div>';
+        }).join('')
+      : '');
+}
+
+/* ─── HISTORY ─────────────────────────────────────────────────────────────── */
+var HISTORY_ICONS = {
+  created: 'plus', deleted: 'trash', restored: 'undo', updated: 'edit',
+  merged: 'merge', merge: 'merge', touch: 'phone', undo: 'undo',
+  meeting_created: 'meetings', meeting_updated: 'meetings', meeting_deleted: 'meetings',
+  doc_added: 'docs', email_sent: 'mail', audit: 'search', settings: 'settings',
+  note_created: 'notes', note_updated: 'notes', note_deleted: 'notes',
+  task_created: 'tasks', task_updated: 'tasks', task_deleted: 'tasks'
+};
+
+function historyIconClass(a) {
+  if (a.type === 'created') return 'created';
+  if (a.type === 'deleted' || a.type === 'note_deleted' || a.type === 'task_deleted') return 'deleted';
+  if (a.actor === 'evo') return 'evo';
+  if (a.type === 'touch') return 'touch';
+  if (a.field === 'stage') return 'stage';
+  return '';
+}
+
+/** Reads as a sentence: what happened, to whom, and what it used to say. */
+function historyHeadline(a) {
+  var who = a.leadName
+    ? '<span class="hist-lead" data-act="open-lead" data-id="' + esc(a.leadId) + '">' + esc(a.leadName) + '</span>'
+    : '<span class="muted">—</span>';
+
+  switch (a.type) {
+    case 'created':        return who + ' was added to the pipeline';
+    case 'deleted':        return who + ' was archived';
+    case 'restored':       return who + ' was restored';
+    case 'merged':         return who + ' was folded into another lead';
+    case 'merge':          return who + ' absorbed ' + esc(a.newValue || 'a duplicate');
+    case 'touch':          return esc(touchTypeMeta(a.field).label) + ' logged with ' + who;
+    case 'undo':           return 'Reverted ' + esc(fieldLabel(a.field)) + ' on ' + who;
+    case 'meeting_created':return 'Meeting scheduled with ' + who;
+    case 'meeting_updated':return 'Meeting updated for ' + who;
+    case 'meeting_deleted':return 'Meeting deleted for ' + who;
+    case 'doc_added':      return 'Document attached to ' + who;
+    case 'email_sent':     return 'Email sent to ' + esc(a.newValue);
+    case 'audit':          return 'Website audit run on ' + who;
+    case 'settings':       return 'Settings changed — ' + esc(a.newValue);
+    case 'note_created':   return 'Note written';
+    case 'note_updated':   return 'Note edited';
+    case 'note_deleted':   return 'Note deleted';
+    case 'task_created':   return 'Task added';
+    case 'task_updated':   return 'Task updated';
+    case 'task_deleted':   return 'Task deleted';
+    default:
+      if (a.field) return esc(fieldLabel(a.field)) + ' changed on ' + who;
+      return esc(a.type || 'Changed') + (a.leadName ? ' — ' + who : '');
+  }
+}
+
+function historyRow(a) {
+  var canUndo = a.entity === 'lead' && a.leadId && a.field &&
+    ['name', 'site', 'phone', 'wa', 'email', 'contact', 'source', 'stage', 'priority',
+     'followup', 'nextStep', 'notes', 'service', 'value', 'proposalSentAt', 'proposalValue',
+     'lostReason', 'star', 'status', 'labels'].indexOf(a.field) >= 0 && !a.undone;
+
+  var showDiff = a.field && (a.oldValue || a.newValue) && a.type !== 'created';
+
+  return '<div class="hist-row' + (a.undone ? ' undone' : '') + '">' +
+    '<span class="hist-time">' + esc(String(a.at || '').slice(11, 16)) + '</span>' +
+    '<span class="hist-icon ' + historyIconClass(a) + '">' + icon(HISTORY_ICONS[a.type] || 'edit', 11) + '</span>' +
+    '<div class="hist-body">' +
+      '<div class="hist-head">' + historyHeadline(a) +
+        (a.actor === 'evo' ? '<span class="chip chip-ghost">Evo</span>' : '') +
+        (a.actor === 'undo' ? '<span class="chip chip-ghost">undo</span>' : '') +
+        (a.undone ? '<span class="chip chip-ghost">reverted</span>' : '') +
+      '</div>' +
+      (showDiff
+        ? '<div class="hist-diff">' +
+            (a.oldValue ? '<span class="hist-old" title="' + esc(a.oldValue) + '">' + esc(truncateText(a.oldValue, 70)) + '</span>' : '<span class="tiny muted">was empty</span>') +
+            '<span class="tiny muted">→</span>' +
+            (a.newValue ? '<span class="hist-new" title="' + esc(a.newValue) + '">' + esc(truncateText(a.newValue, 70)) + '</span>' : '<span class="tiny muted">cleared</span>') +
+          '</div>'
+        : (a.details ? '<div class="tiny muted" style="margin-top:2px">' + esc(a.details) + '</div>' : '')) +
+    '</div>' +
+    '<div class="hist-actions">' +
+      (a.leadId ? '<button class="btn btn-sm btn-icon" data-act="open-lead" data-id="' + esc(a.leadId) + '" title="Open the lead">' + icon('eye', 12) + '</button>' : '') +
+      (canUndo ? '<button class="btn btn-sm" data-act="history-undo" data-id="' + esc(a.id) + '" title="Put this back the way it was">Undo</button>' : '') +
+    '</div>' +
+  '</div>';
+}
+
+function truncateText(v, n) {
+  var s = String(v === null || v === undefined ? '' : v);
+  return s.length > n ? s.slice(0, n) + '…' : s;
+}
+
+function renderHistory() {
+  var host = $('#historyBody');
+  if (!host) return;
+
+  syncHistoryControls();
+
+  var rows = State.ui.historyRows && State.ui.historyRows.length
+    ? State.ui.historyRows
+    : (State.activities || []);
+
+  var sub = $('#historySub');
+  if (sub) {
+    sub.textContent = State.ui.historyLoading
+      ? 'Loading…'
+      : (State.ui.historyTotal || rows.length) + ' recorded change' +
+        ((State.ui.historyTotal || rows.length) === 1 ? '' : 's') +
+        ' · showing ' + rows.length;
+  }
+
+  var facetsEl = $('#historyFacets');
+  if (facetsEl) {
+    var f = (State.ui.historyFacets && State.ui.historyFacets.type) || {};
+    var keys = Object.keys(f).sort(function (a, b) { return f[b] - f[a]; }).slice(0, 12);
+    facetsEl.innerHTML = keys.length
+      ? '<button class="pill' + (State.ui.history.type ? '' : ' active') + '" data-act="history-type" data-value="">All' +
+        '<span class="cnt">' + (State.ui.historyTotal || rows.length) + '</span></button>' +
+        keys.map(function (k) {
+          return '<button class="pill' + (State.ui.history.type === k ? ' active' : '') + '" data-act="history-type" data-value="' + esc(k) + '">' +
+            esc(historyTypeLabel(k)) + '<span class="cnt">' + f[k] + '</span></button>';
+        }).join('')
+      : '';
+  }
+
+  if (State.ui.historyLoading && !rows.length) {
+    host.innerHTML = '<div class="hist-empty">Reading the journal…</div>';
+    return;
+  }
+  if (!rows.length) {
+    host.innerHTML = emptyState('Nothing recorded yet',
+      'Every edit, stage move, call and note gets written down here from now on.');
+    return;
+  }
+
+  var groups = {};
+  rows.forEach(function (a) {
+    var day = String(a.at || '').slice(0, 10) || 'unknown';
+    (groups[day] = groups[day] || []).push(a);
+  });
+
+  var days = Object.keys(groups).sort(function (a, b) { return b.localeCompare(a); });
+  host.innerHTML = days.map(function (d) {
+    return '<div class="hist-day-label">' + esc(d === 'unknown' ? 'Undated' : Fmt.dayLabel(d)) +
+      ' <span class="tiny muted" style="text-transform:none;letter-spacing:0">' + groups[d].length + '</span></div>' +
+      groups[d].map(historyRow).join('');
+  }).join('');
+
+  var more = $('#btnHistoryMore');
+  if (more) more.hidden = rows.length >= (State.ui.historyTotal || 0);
+}
+
+function historyTypeLabel(t) {
+  var map = {
+    updated: 'Edits', created: 'Added', deleted: 'Archived', restored: 'Restored',
+    touch: 'Interactions', merge: 'Merges', merged: 'Merged away', undo: 'Undone',
+    meeting_created: 'Meetings booked', meeting_updated: 'Meetings edited',
+    meeting_deleted: 'Meetings deleted', doc_added: 'Documents', email_sent: 'Emails',
+    audit: 'Audits', settings: 'Settings', note_created: 'Notes added',
+    note_updated: 'Notes edited', note_deleted: 'Notes deleted',
+    task_created: 'Tasks added', task_updated: 'Tasks edited', task_deleted: 'Tasks deleted'
+  };
+  return map[t] || t;
+}
+
+function syncHistoryControls() {
+  var h = State.ui.history;
+  var leadOpts = activeLeads().slice().sort(function (a, b) {
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  }).map(function (l) { return { value: l.id, label: l.name || 'Untitled' }; });
+  fillSelect('#hLead', 'All leads', leadOpts, h.leadId);
+
+  var facets = State.ui.historyFacets || {};
+  fillSelect('#hType', 'All kinds',
+    Object.keys(facets.type || {}).sort().map(function (k) { return { value: k, label: historyTypeLabel(k) }; }), h.type);
+  fillSelect('#hField', 'All fields',
+    Object.keys(facets.field || {}).sort().map(function (k) { return { value: k, label: fieldLabel(k) }; }), h.field);
+  fillSelect('#hActor', 'Anyone',
+    Object.keys(facets.actor || {}).sort().map(function (k) { return { value: k, label: k }; }), h.actor);
+
+  var q = $('#hSearch'); if (q && q.value !== h.search) q.value = h.search;
+  var from = $('#hFrom'); if (from && from.value !== h.from) from.value = h.from;
+  var to = $('#hTo'); if (to && to.value !== h.to) to.value = h.to;
+}
+
+/* ─── LEAD TIMELINE (drawer) ──────────────────────────────────────────────── */
+function renderDrawerTimeline(l) {
+  var host = $('#pane-timeline');
+  if (!host) return;
+
+  var c = leadCounts(l);
+  var touches = (State.touches || []).filter(function (t) { return t.leadId === l.id; });
+  var stageMoves = (State.stageEvents || []).filter(function (e) { return e.leadId === l.id; });
+  var meetings = State.meetings.filter(function (m) { return m.leadId === l.id; });
+
+  var items = [];
+  touches.forEach(function (t) {
+    items.push({
+      at: t.at, color: touchTypeMeta(t.type).color,
+      title: touchTypeMeta(t.type).label + (t.auto ? ' (from a stage move)' : ''),
+      meta: [t.outcome, t.notes].filter(Boolean).join(' — ')
+    });
+  });
+  stageMoves.forEach(function (e) {
+    items.push({
+      at: e.at, color: stageMeta(e.toStage).color,
+      title: 'Stage ' + (e.fromStage ? e.fromStage + ' → ' : '') + e.toStage,
+      meta: e.actor === 'evo' ? 'by Evo' : ''
+    });
+  });
+  meetings.forEach(function (m) {
+    items.push({
+      at: (m.date || '') + 'T' + (m.time || '00:00') + ':00',
+      color: '#0891B2',
+      title: (m.status === 'done' ? 'Met — ' : 'Meeting — ') + (m.title || 'Meeting'),
+      meta: [m.decision, m.nextStep].filter(Boolean).join(' · ')
+    });
+  });
+  items.sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); });
+
+  var pills = ['call', 'meeting', 'proposal', 'message', 'email', 'audit', 'visit']
+    .filter(function (k) { return c[k]; })
+    .map(function (k) {
+      var m = touchTypeMeta(k);
+      return '<span class="count-pill"><span class="chip-dot" style="background:' + esc(m.color) + '"></span>' +
+        '<b>' + c[k] + '</b> ' + esc(m.label) + (c[k] > 1 ? 's' : '') + '</span>';
+    }).join('');
+
+  host.innerHTML =
+    '<div class="section"><div class="section-title">What has actually happened' +
+      '<span class="tiny muted">' + (c.total || 0) + ' interaction' + ((c.total || 0) === 1 ? '' : 's') + '</span></div>' +
+      (pills ? '<div class="count-pills">' + pills + '</div>' :
+        '<div class="muted small">Nothing logged with this lead yet.</div>') +
+    '</div>' +
+
+    '<div class="section"><div class="section-title">Log something now</div>' +
+      '<div class="row">' +
+      (State.settings.touchTypes || DEFAULT_SETTINGS.touchTypes).map(function (t) {
+        return '<button class="btn btn-sm" data-act="log-touch" data-id="' + esc(l.id) + '" data-value="' + esc(t.key) + '">' +
+          '<span class="chip-dot" style="background:' + esc(t.color) + '"></span>' + esc(t.label) + '</button>';
+      }).join('') +
+      '</div></div>' +
+
+    '<div class="section"><div class="section-title">Everything, newest first</div>' +
+      (items.length
+        ? '<div class="tline">' + items.map(function (it, i) {
+            return '<div class="tline-item">' +
+              '<div class="tline-rail"><span class="tline-dot" style="background:' + esc(it.color) + '"></span>' +
+              (i < items.length - 1 ? '<span class="tline-line"></span>' : '') + '</div>' +
+              '<div class="tline-body">' +
+                '<div class="tline-title">' + esc(it.title) + '</div>' +
+                '<div class="tline-meta">' + esc(Fmt.date(String(it.at).slice(0, 10))) +
+                (String(it.at).slice(11, 16) !== '00:00' && String(it.at).length > 10 ? ' · ' + esc(String(it.at).slice(11, 16)) : '') +
+                (it.meta ? ' · ' + esc(it.meta) : '') + '</div>' +
+              '</div></div>';
+          }).join('') + '</div>'
+        : '<div class="muted small">Nothing yet. Log a call or move the stage and it starts filling in.</div>') +
+    '</div>';
 }

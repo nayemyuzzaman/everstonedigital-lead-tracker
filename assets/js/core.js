@@ -15,7 +15,9 @@ var LS = {
   drafts: 'ev5_drafts',
   clientId: 'ev5_gclient',
   seenAlarms: 'ev5_alarms',
-  filters: 'ev5_filters'
+  filters: 'ev5_filters',
+  notesUi: 'ev6_notes_ui',
+  flowUi: 'ev6_flow_ui'
 };
 
 var SYNC_INTERVAL_MS = 90000;
@@ -51,7 +53,16 @@ function debounce(fn, ms) {
   };
 }
 
-function clone(o) { return JSON.parse(JSON.stringify(o)); }
+/**
+ * JSON.stringify(undefined) returns undefined rather than a string, so the
+ * obvious one-liner throws the moment it is handed a field the object does not
+ * have yet — which happens whenever a patch introduces a new field to a lead
+ * that was cached before that field existed.
+ */
+function clone(o) {
+  if (o === undefined || o === null) return o;
+  return JSON.parse(JSON.stringify(o));
+}
 
 /** A bare domain typed without a scheme resolves against our own origin and
  *  produces a 404 on the dashboard. Always give it a scheme. */
@@ -160,6 +171,11 @@ var State = {
   meetings: [],
   docs: [],
   activities: [],
+  notes: [],
+  tasks: [],
+  touches: [],
+  stageEvents: [],
+  flow: null,
   settings: {},
   templates: [],
   ui: {
@@ -170,6 +186,16 @@ var State = {
     filters: { search: '', stage: '', priority: '', source: '', label: '', health: '', sort: 'smart' },
     meetFilter: 'active',
     archiveFilter: 'all',
+    notesTab: 'notes',
+    notesView: 'grid',
+    notesSearch: '',
+    notesLabel: '',
+    history: { search: '', leadId: '', type: '', field: '', actor: '', from: '', to: '', limit: 120 },
+    historyRows: [],
+    historyFacets: null,
+    historyTotal: 0,
+    historyLoading: false,
+    flowFocus: null,
     online: navigator.onLine,
     syncing: false
   }
@@ -177,13 +203,27 @@ var State = {
 
 var DEFAULT_SETTINGS = {
   stages: [
-    { name: 'New', color: '#2563EB' },
-    { name: 'Contacted', color: '#7C3AED' },
-    { name: 'Meeting', color: '#0891B2' },
-    { name: 'Proposal', color: '#EA580C' },
-    { name: 'Negotiation', color: '#CA8A04' },
-    { name: 'Hired', color: '#059669' },
-    { name: 'Dead', color: '#6B7280' }
+    { name: 'New', color: '#2563EB', group: 'open' },
+    { name: 'calling But No Response', color: '#7C3AED', group: 'open' },
+    { name: 'Phone Call', color: '#0EA5E9', group: 'open' },
+    { name: 'Maybe Potential', color: '#14B8A6', group: 'open' },
+    { name: 'My Chioce', color: '#22C55E', group: 'open' },
+    { name: 'Audit Required', color: '#84CC16', group: 'open' },
+    { name: 'Meeting in Progress', color: '#0891B2', group: 'open' },
+    { name: 'Meeting Completed', color: '#0D9488', group: 'open' },
+    { name: 'Meeting Re-Schedule', color: '#06B6D4', group: 'open' },
+    { name: 'Follow-up', color: '#A855F7', group: 'open' },
+    { name: 'Follow-Up Phone Call', color: '#8B5CF6', group: 'open' },
+    { name: 'Follow-up Meeting', color: '#6366F1', group: 'open' },
+    { name: 'Urgent Call/Follow-Up V.V.I.P', color: '#DC2626', group: 'open' },
+    { name: 'Proposal', color: '#EA580C', group: 'open' },
+    { name: 'Negotiation', color: '#CA8A04', group: 'open' },
+    { name: 'In-Progressing', color: '#F59E0B', group: 'open' },
+    { name: 'Hired', color: '#059669', group: 'won' },
+    { name: 'Nayem Client', color: '#047857', group: 'won' },
+    { name: 'N/A', color: '#94A3B8', group: 'low' },
+    { name: 'Maybe Not Potential', color: '#F97316', group: 'low' },
+    { name: 'Dead', color: '#6B7280', group: 'dead' }
   ],
   priorities: [
     { key: 'hot', name: 'Hot', color: '#DC2626' },
@@ -196,11 +236,56 @@ var DEFAULT_SETTINGS = {
   lostReasons: ['Price too high', 'Bad timing', 'Went with competitor', 'No response', 'Not a fit', 'Doing it in-house'],
   cadence: { Proposal: [2, 5, 10, 21], Meeting: [1, 4, 9], Contacted: [3, 7, 14] },
   rotting: { warnDays: 14, staleDays: 30 },
-  closedStages: ['Hired', 'Dead'],
+  closedStages: ['Hired', 'Nayem Client', 'Dead'],
   aiInstructions: '',
   aiModel: 'fast',
   alarmEnabled: true,
-  currency: '৳'
+  currency: '৳',
+
+  leadSort: 'smart',
+  priorityRank: { hot: 0, warm: 1, cold: 2 },
+  bandRank: { open: 0, won: 1, low: 2, dead: 3 },
+  manualOrderEnabled: true,
+  flowCards: [
+    { id: 'call', label: 'Calls made', kind: 'touch', value: 'call', icon: 'phone', color: '#0EA5E9', show: true },
+    { id: 'meeting', label: 'Meetings held', kind: 'touch', value: 'meeting', icon: 'meetings', color: '#0891B2', show: true },
+    { id: 'proposal', label: 'Proposals sent', kind: 'touch', value: 'proposal', icon: 'docs', color: '#EA580C', show: true },
+    { id: 'message', label: 'Messages sent', kind: 'touch', value: 'message', icon: 'wa', color: '#22C55E', show: true },
+    { id: 'audit', label: 'Audits done', kind: 'touch', value: 'audit', icon: 'analytics', color: '#84CC16', show: false },
+    { id: 'inMeeting', label: 'In meeting now', kind: 'stage', value: ['Meeting in Progress', 'Meeting Re-Schedule', 'Follow-up Meeting'], icon: 'meetings', color: '#6366F1', show: false },
+    { id: 'negotiating', label: 'Negotiating', kind: 'stage', value: ['Negotiation', 'Proposal'], icon: 'pipeline', color: '#CA8A04', show: false },
+    { id: 'won', label: 'Signed', kind: 'stage', value: ['Hired', 'Nayem Client'], icon: 'check', color: '#059669', show: false },
+    { id: 'everMet', label: 'Ever met', kind: 'passed', value: ['Meeting in Progress', 'Meeting Completed', 'Follow-up Meeting', 'Meeting Re-Schedule'], icon: 'meetings', color: '#0D9488', show: false },
+    { id: 'pipeline', label: 'Open pipeline', kind: 'metric', value: 'pipelineValue', icon: 'pipeline', color: '#17658A', show: false }
+  ],
+  stageTouchMap: {
+    'Phone Call': 'call',
+    'calling But No Response': 'call',
+    'Follow-Up Phone Call': 'call',
+    'Urgent Call/Follow-Up V.V.I.P': 'call',
+    'Meeting in Progress': 'meeting',
+    'Meeting Completed': 'meeting',
+    'Follow-up Meeting': 'meeting',
+    'Meeting Re-Schedule': 'meeting',
+    'Proposal': 'proposal',
+    'Audit Required': 'audit',
+    'Negotiation': 'negotiation'
+  },
+  touchTypes: [
+    { key: 'call', label: 'Call', color: '#0EA5E9' },
+    { key: 'meeting', label: 'Meeting', color: '#0891B2' },
+    { key: 'proposal', label: 'Proposal', color: '#EA580C' },
+    { key: 'message', label: 'Message', color: '#22C55E' },
+    { key: 'email', label: 'Email', color: '#8B5CF6' },
+    { key: 'audit', label: 'Audit', color: '#84CC16' },
+    { key: 'negotiation', label: 'Negotiation', color: '#CA8A04' },
+    { key: 'visit', label: 'Visit', color: '#F97316' },
+    { key: 'note', label: 'Note', color: '#64748B' }
+  ],
+  noteColors: ['#FFFFFF', '#FFF3C4', '#FFE0E0', '#E3F2E1', '#DDEBFF', '#EDE1FF', '#FFE7CC', '#E0F7FA'],
+  recentLimit: 8,
+  historyPageSize: 120,
+  showFlowStrip: true
 };
 
 /* ─── derived helpers ───────────────────────────────────────────────────── */
@@ -213,7 +298,72 @@ function getMeeting(id) {
   return null;
 }
 function activeLeads() {
-  return State.leads.filter(function (l) { return l.status !== 'deleted'; });
+  return State.leads.filter(function (l) { return l.status !== 'deleted' && l.status !== 'merged'; });
+}
+
+/** open · won · low · dead — the band decides where a lead sits in the list. */
+function stageBand(name) {
+  var m = stageMeta(name);
+  if (m && m.group) return m.group;
+  if (name === 'Dead') return 'dead';
+  if ((State.settings.closedStages || []).indexOf(name) >= 0) return 'won';
+  return 'open';
+}
+function bandRank(name) {
+  var r = State.settings.bandRank || { open: 0, won: 1, low: 2, dead: 3 };
+  var b = stageBand(name);
+  return r[b] === undefined ? 0 : r[b];
+}
+function priorityRank(key) {
+  var r = State.settings.priorityRank || { hot: 0, warm: 1, cold: 2 };
+  return r[key] === undefined ? 1.5 : r[key];
+}
+
+/**
+ * The default order Nayem asked for: starred at the top, then hot before warm
+ * before cold, with "Maybe Not Potential" and friends sinking and Dead at the
+ * very bottom. Anything dragged by hand breaks ties inside its own band.
+ */
+function smartCompare(a, b) {
+  var sa = bandRank(a.stage) >= 2 ? bandRank(a.stage) : 0;
+  var sb = bandRank(b.stage) >= 2 ? bandRank(b.stage) : 0;
+  if (sa !== sb) return sa - sb;
+  if (!!a.star !== !!b.star) return a.star ? -1 : 1;
+  var ba = bandRank(a.stage), bb = bandRank(b.stage);
+  if (ba !== bb) return ba - bb;
+  var pa = priorityRank(a.priority), pb = priorityRank(b.priority);
+  if (pa !== pb) return pa - pb;
+  var ma = a.sortOrder === null || a.sortOrder === undefined ? null : Number(a.sortOrder);
+  var mb = b.sortOrder === null || b.sortOrder === undefined ? null : Number(b.sortOrder);
+  if (ma !== null && mb !== null && ma !== mb) return ma - mb;
+  return attentionScore(b) - attentionScore(a);
+}
+
+function manualCompare(a, b) {
+  var ma = Number(a.sortOrder || 0), mb = Number(b.sortOrder || 0);
+  if (ma !== mb) return ma - mb;
+  return String(a.name || '').localeCompare(String(b.name || ''));
+}
+
+/** The leads the recent strip shows: whatever was worked on most recently. */
+function recentlyWorked(limit) {
+  return activeLeads().slice().sort(function (a, b) {
+    var ka = a.lastActivityAt || a.updatedAt || a.createdAt || '';
+    var kb = b.lastActivityAt || b.updatedAt || b.createdAt || '';
+    return String(kb).localeCompare(String(ka));
+  }).slice(0, limit || (State.settings.recentLimit || 8));
+}
+
+function getNote(id) {
+  for (var i = 0; i < State.notes.length; i++) if (State.notes[i].id === String(id)) return State.notes[i];
+  return null;
+}
+function getTask(id) {
+  for (var i = 0; i < State.tasks.length; i++) if (State.tasks[i].id === String(id)) return State.tasks[i];
+  return null;
+}
+function leadCounts(lead) {
+  return (lead && lead.counts) || { total: 0, call: 0, meeting: 0, proposal: 0, message: 0, email: 0, audit: 0 };
 }
 function isClosed(lead) {
   var closed = State.settings.closedStages || ['Hired', 'Dead'];
@@ -300,6 +450,9 @@ function saveCache() {
   try {
     localStorage.setItem(LS.cache, JSON.stringify({
       leads: State.leads, meetings: State.meetings, docs: State.docs,
+      notes: State.notes, tasks: State.tasks,
+      touches: State.touches.slice(-400), stageEvents: State.stageEvents.slice(-400),
+      flow: State.flow,
       activities: State.activities.slice(0, 200), settings: State.settings, at: Date.now()
     }));
   } catch (e) { /* quota — the sheet is still the source of truth */ }
@@ -313,6 +466,11 @@ function loadCache() {
     State.leads = c.leads || [];
     State.meetings = c.meetings || [];
     State.docs = c.docs || [];
+    State.notes = c.notes || [];
+    State.tasks = c.tasks || [];
+    State.touches = c.touches || [];
+    State.stageEvents = c.stageEvents || [];
+    State.flow = c.flow || null;
     State.activities = c.activities || [];
     State.settings = Object.assign({}, DEFAULT_SETTINGS, c.settings || {});
     return true;
@@ -463,6 +621,16 @@ var Outbox = {
     });
     return s;
   },
+  /** Generic version for the collections added in v6. */
+  pendingIdsFor: function (key) {
+    var s = {};
+    this.items.forEach(function (i) {
+      var obj = i.body && i.body[key];
+      if (obj && obj.id) s[String(obj.id)] = true;
+      if (i.body && i.body.id && (i.action.toLowerCase().indexOf(key) >= 0)) s[String(i.body.id)] = true;
+    });
+    return s;
+  },
 
   flush: function () {
     if (this.flushing || !this.items.length) { setSync(); return Promise.resolve(); }
@@ -514,22 +682,68 @@ var Outbox = {
   }
 };
 
+/**
+ * Server rows win, local rows with unsent writes are kept, and anything this
+ * device has that the server has not seen yet is preserved rather than dropped.
+ */
+function mergeCollection(local, server, pending) {
+  if (!server) return local;
+  var localById = {};
+  (local || []).forEach(function (x) { localById[x.id] = x; });
+  var merged = server.map(function (sx) {
+    return (pending[sx.id] && localById[sx.id]) ? localById[sx.id] : sx;
+  });
+  var serverIds = {};
+  server.forEach(function (x) { serverIds[x.id] = true; });
+  (local || []).forEach(function (x) { if (!serverIds[x.id]) merged.push(x); });
+  return merged;
+}
+
+/**
+ * A row that came back from the sheet is authoritative and replaces the local
+ * copy outright. A response that only carries a few fields is merged instead —
+ * otherwise one trimmed reply would blank out everything the server happened
+ * not to mention, and the record would look like it had been wiped.
+ */
+function isCompleteRecord(o, keys) {
+  if (!o || !o.id) return false;
+  for (var i = 0; i < keys.length; i++) if (o[keys[i]] === undefined) return false;
+  return true;
+}
+
 function mergeServerLead(serverLead) {
+  if (!serverLead || !serverLead.id) return;
   var pending = Outbox.pendingLeadIds();
   if (pending[serverLead.id]) return;
+  var complete = isCompleteRecord(serverLead, ['stage', 'createdAt', 'updatedAt']);
   for (var i = 0; i < State.leads.length; i++) {
-    if (State.leads[i].id === serverLead.id) { State.leads[i] = serverLead; return; }
+    if (State.leads[i].id !== serverLead.id) continue;
+    var local = State.leads[i];
+    var next = complete ? serverLead : Object.assign({}, local, serverLead);
+    // counts and stagesVisited are worked out from the interaction ledger, not
+    // stored on the lead's row, so a save reply never carries them. Keeping the
+    // local figures stops the "3 calls · 1 meeting" line blinking out of every
+    // row the moment you edit anything.
+    if (next.counts === undefined && local.counts !== undefined) next.counts = local.counts;
+    if (next.stagesVisited === undefined && local.stagesVisited !== undefined) next.stagesVisited = local.stagesVisited;
+    State.leads[i] = next;
+    return;
   }
-  State.leads.push(serverLead);
+  if (complete) State.leads.push(serverLead);
 }
 
 function mergeServerMeeting(serverMeeting) {
+  if (!serverMeeting || !serverMeeting.id) return;
   var pending = Outbox.pendingMeetingIds();
   if (pending[serverMeeting.id]) return;
+  var complete = isCompleteRecord(serverMeeting, ['status', 'createdAt', 'updatedAt']);
   for (var i = 0; i < State.meetings.length; i++) {
-    if (State.meetings[i].id === serverMeeting.id) { State.meetings[i] = serverMeeting; return; }
+    if (State.meetings[i].id === serverMeeting.id) {
+      State.meetings[i] = complete ? serverMeeting : Object.assign({}, State.meetings[i], serverMeeting);
+      return;
+    }
   }
-  State.meetings.push(serverMeeting);
+  if (complete) State.meetings.push(serverMeeting);
 }
 
 /* ─── sync ──────────────────────────────────────────────────────────────── */
@@ -591,7 +805,18 @@ function pullFromServer(silent) {
 
     State.docs = res.docs || State.docs;
     State.activities = res.activities || State.activities;
+
+    // Notes and tasks follow the same rule as leads: the sheet wins, except
+    // where this device is still holding an unsent edit.
+    State.notes = mergeCollection(State.notes, res.notes, Outbox.pendingIdsFor('note'));
+    State.tasks = mergeCollection(State.tasks, res.tasks, Outbox.pendingIdsFor('task'));
+
+    State.touches = res.touches || State.touches;
+    State.stageEvents = res.stageEvents || State.stageEvents;
+    State.flow = res.flow || State.flow;
+
     if (res.settings) State.settings = Object.assign({}, DEFAULT_SETTINGS, res.settings);
+    if (res.version) State.serverVersion = res.version;
 
     setSync();
     Store.notify();
@@ -693,8 +918,38 @@ var Ops = {
       ': Stage ' + lead.stage + ' → ' + stage
     ]);
 
+    var from = lead.stage;
+    var nowIso = new Date().toISOString();
+    patch.stagePath = (lead.stagePath ? lead.stagePath + '>' : '') + stage;
+    patch.stageEnteredAt = nowIso;
+
     Ops.saveLead(patch, { label: 'stage change on ' + lead.name });
 
+    // Mirror what the sheet is about to record, so the strip across the top of
+    // Today updates the instant you move a card instead of on the next sync.
+    // These are local echoes only — never queued — because the server writes
+    // the real rows and the next pull replaces this list wholesale.
+    State.stageEvents.push({
+      id: uid('SE'), leadId: id, leadName: lead.name, fromStage: from,
+      toStage: stage, at: nowIso, actor: 'app', local: true
+    });
+
+    var touchType = (State.settings.stageTouchMap || {})[stage];
+    if (touchType) {
+      State.touches.push({
+        id: uid('TC'), leadId: id, leadName: lead.name, type: touchType,
+        at: nowIso, direction: 'out', outcome: '', duration: 0,
+        notes: 'Stage moved to ' + stage, stageAtTime: stage,
+        actor: 'app', auto: true, local: true
+      });
+      lead.counts = lead.counts || { total: 0 };
+      lead.counts.total = (lead.counts.total || 0) + 1;
+      lead.counts[touchType] = (lead.counts[touchType] || 0) + 1;
+      lead.lastTouchAt = nowIso;
+      lead.lastTouchType = touchType;
+    }
+
+    Store.notify();
     if (stage === 'Dead') askLostReason(id);
   },
 
@@ -870,6 +1125,186 @@ var Ops = {
   saveSettings: function (patch) {
     State.settings = Object.assign({}, State.settings, patch);
     Outbox.add('saveSettings', { settings: State.settings });
+    Store.notify();
+  },
+
+  /* ─── notes ───────────────────────────────────────────────────────────── */
+  saveNote: function (patch, options) {
+    options = options || {};
+    var isNew = !patch.id;
+    var note;
+
+    if (isNew) {
+      note = Object.assign({
+        id: uid('N'), title: '', body: '', checklist: [], color: '#FFFFFF',
+        pinned: false, archived: false, labels: [], reminderAt: '', leadId: '',
+        images: [], sortOrder: Date.now() % 100000000,
+        createdAt: new Date().toISOString(), status: 'active'
+      }, patch);
+      note.updatedAt = note.createdAt;
+      State.notes.unshift(note);
+      Outbox.add('saveNote', { note: note });
+      if (!options.silent) {
+        UndoStack.push('added note', function () {
+          State.notes = State.notes.filter(function (n) { return n.id !== note.id; });
+          Outbox.add('deleteNote', { id: note.id });
+          Store.notify();
+        });
+      }
+    } else {
+      note = getNote(patch.id);
+      if (!note) return null;
+      var before = {};
+      Object.keys(patch).forEach(function (k) { if (k !== 'id') before[k] = clone(note[k]); });
+      Object.keys(patch).forEach(function (k) { if (k !== 'id') note[k] = patch[k]; });
+      note.updatedAt = new Date().toISOString();
+      Outbox.add('saveNote', { note: Object.assign({ id: note.id }, patch) });
+      if (!options.silent) {
+        UndoStack.push(options.label || 'note edit', function () {
+          var target = getNote(patch.id);
+          if (!target) return;
+          Object.keys(before).forEach(function (k) { target[k] = before[k]; });
+          Outbox.add('saveNote', { note: Object.assign({ id: target.id }, before) });
+          Store.notify();
+        });
+      }
+    }
+    Store.notify();
+    return note;
+  },
+
+  deleteNote: function (id) {
+    var note = getNote(id);
+    if (!note) return;
+    var snapshot = clone(note);
+    State.notes = State.notes.filter(function (n) { return n.id !== id; });
+    Outbox.add('deleteNote', { id: id });
+    UndoStack.push('deleted note', function () {
+      State.notes.unshift(snapshot);
+      Outbox.add('saveNote', { note: snapshot });
+      Store.notify();
+    });
+    Store.notify();
+    toastAction('Note deleted', 'Undo', function () { UndoStack.run(); });
+  },
+
+  reorderNotes: function (order) {
+    order.forEach(function (id, i) {
+      var n = getNote(id);
+      if (n) n.sortOrder = (i + 1) * 10;
+    });
+    Outbox.add('reorderNotes', { order: order });
+    Store.notify();
+  },
+
+  /* ─── tasks ───────────────────────────────────────────────────────────── */
+  saveTask: function (patch, options) {
+    options = options || {};
+    var isNew = !patch.id;
+    var task;
+
+    if (isNew) {
+      task = Object.assign({
+        id: uid('T'), noteId: '', text: '', done: false, due: '', dueTime: '',
+        priority: 'normal', labels: [], sortOrder: Date.now() % 100000000, leadId: '',
+        createdAt: new Date().toISOString(), completedAt: '', status: 'active'
+      }, patch);
+      task.updatedAt = task.createdAt;
+      State.tasks.unshift(task);
+      Outbox.add('saveTask', { task: task });
+      if (!options.silent) {
+        UndoStack.push('added task', function () {
+          State.tasks = State.tasks.filter(function (t) { return t.id !== task.id; });
+          Outbox.add('deleteTask', { id: task.id });
+          Store.notify();
+        });
+      }
+    } else {
+      task = getTask(patch.id);
+      if (!task) return null;
+      var before = {};
+      Object.keys(patch).forEach(function (k) { if (k !== 'id') before[k] = clone(task[k]); });
+      Object.keys(patch).forEach(function (k) { if (k !== 'id') task[k] = patch[k]; });
+      task.updatedAt = new Date().toISOString();
+      if (patch.done !== undefined) task.completedAt = patch.done ? task.updatedAt : '';
+      Outbox.add('saveTask', { task: Object.assign({ id: task.id }, patch) });
+      if (!options.silent) {
+        UndoStack.push(options.label || 'task edit', function () {
+          var target = getTask(patch.id);
+          if (!target) return;
+          Object.keys(before).forEach(function (k) { target[k] = before[k]; });
+          Outbox.add('saveTask', { task: Object.assign({ id: target.id }, before) });
+          Store.notify();
+        });
+      }
+    }
+    Store.notify();
+    return task;
+  },
+
+  deleteTask: function (id) {
+    var task = getTask(id);
+    if (!task) return;
+    var snapshot = clone(task);
+    State.tasks = State.tasks.filter(function (t) { return t.id !== id; });
+    Outbox.add('deleteTask', { id: id });
+    UndoStack.push('deleted task', function () {
+      State.tasks.unshift(snapshot);
+      Outbox.add('saveTask', { task: snapshot });
+      Store.notify();
+    });
+    Store.notify();
+  },
+
+  /* ─── interactions ────────────────────────────────────────────────────── */
+  /**
+   * Records that something actually happened with a lead — a call, a meeting,
+   * a proposal going out. This is the ledger the counters across the top of
+   * Today read from, and the reason a lead moving on from "Phone Call" no
+   * longer erases the fact that you phoned them.
+   */
+  logTouch: function (leadId, type, extra) {
+    var lead = getLead(leadId);
+    if (!lead) return null;
+    extra = extra || {};
+    var touch = {
+      id: uid('TC'), leadId: leadId, leadName: lead.name, type: type,
+      at: extra.at || new Date().toISOString(), direction: extra.direction || 'out',
+      outcome: extra.outcome || '', duration: extra.duration || 0,
+      notes: extra.notes || '', stageAtTime: lead.stage, actor: 'app', auto: false
+    };
+    State.touches.push(touch);
+
+    // Keep the local counters honest until the next pull confirms them.
+    lead.counts = lead.counts || { total: 0 };
+    lead.counts.total = (lead.counts.total || 0) + 1;
+    lead.counts[type] = (lead.counts[type] || 0) + 1;
+    lead.lastTouchAt = touch.at;
+    lead.lastTouchType = type;
+    lead.lastActivityAt = touch.at;
+
+    Outbox.add('logTouch', { touch: touch });
+    UndoStack.push('logged ' + type + ' with ' + (lead.name || 'lead'), function () {
+      State.touches = State.touches.filter(function (t) { return t.id !== touch.id; });
+      var l = getLead(leadId);
+      if (l && l.counts) {
+        l.counts.total = Math.max(0, (l.counts.total || 1) - 1);
+        l.counts[type] = Math.max(0, (l.counts[type] || 1) - 1);
+      }
+      Outbox.add('deleteTouch', { id: touch.id });
+      Store.notify();
+    });
+    Store.notify();
+    return touch;
+  },
+
+  /* ─── manual order ────────────────────────────────────────────────────── */
+  reorderLeads: function (order) {
+    order.forEach(function (id, i) {
+      var l = getLead(id);
+      if (l) l.sortOrder = (i + 1) * 10;
+    });
+    Outbox.add('reorderLeads', { order: order });
     Store.notify();
   },
 
