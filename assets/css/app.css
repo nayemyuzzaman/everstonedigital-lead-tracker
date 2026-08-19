@@ -630,8 +630,15 @@ input, textarea, select { -webkit-user-drag: none; }
 .stage-step.current { background: var(--ink); border-color: var(--ink); color: var(--surface); font-weight: 650; }
 
 /* ═══════════════ MODAL ═══════════════ */
+/* Above the sign-in gate (z-index 300), not below it.
+   The gate is a full-screen opaque overlay, and the one modal you must be able
+   to reach from it is "Change backend URL" — without a backend URL there is
+   nothing to sign in to. At z-index 120 that modal opened correctly and then
+   rendered behind the gate, so the button looked dead and the app looked
+   broken on a fresh browser. Anything that can be summoned from the gate has
+   to outrank it. */
 .modal {
-  position: fixed; z-index: 120; inset: 0; display: none;
+  position: fixed; z-index: 400; inset: 0; display: none;
   align-items: center; justify-content: center; padding: 18px;
 }
 .modal.show { display: flex; }
@@ -657,8 +664,11 @@ input, textarea, select { -webkit-user-drag: none; }
 .modal-foot .spread { margin-right: auto; }
 
 /* ═══════════════ TOASTS ═══════════════ */
+/* Top of everything. A toast is the app confirming it heard you — "Saved.
+   Sign in to continue." fires while the gate is still up, and at z-index 200
+   that confirmation was hidden behind the gate too. */
 .toasts {
-  position: fixed; right: 18px; bottom: 18px; z-index: 200;
+  position: fixed; right: 18px; bottom: 18px; z-index: 500;
   display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
 }
 .toast {
