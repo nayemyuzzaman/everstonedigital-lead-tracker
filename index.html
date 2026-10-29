@@ -26,6 +26,7 @@
   <symbol id="ic-pipeline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="11" rx="1"/><rect x="17" y="4" width="4" height="14" rx="1"/></symbol>
   <symbol id="ic-followup" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M9 15l2 2 4-4"/></symbol>
   <symbol id="ic-meetings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="3.5"/><path d="M22 20v-2a4 4 0 0 0-3-3.87M16.5 3.6a4 4 0 0 1 0 6.8"/></symbol>
+  <symbol id="ic-report" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18M8 17v-3M12 17v-5M16 17v-2"/></symbol>
   <symbol id="ic-analytics" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></symbol>
   <symbol id="ic-messages" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 14a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></symbol>
   <symbol id="ic-docs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
@@ -66,26 +67,74 @@
   <symbol id="ic-merge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 21V9a4 4 0 0 1 4-4h2"/><path d="M17 21V9a4 4 0 0 0-4-4h-2"/><path d="M10 8 13 5l-3-3"/></symbol>
   <symbol id="ic-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></symbol>
   <symbol id="ic-tasks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 10l2.5 2.5L16 7"/><path d="M8 16h8"/></symbol>
+  <symbol id="ic-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="ic-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="ic-more" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></symbol>
+  <symbol id="ic-sidebar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol>
   <symbol id="ic-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
 </svg>
 
-<!-- ═══ LOGIN ═══ -->
+<!-- ═══ SIGN IN ═══ -->
 <div class="gate" id="gate" hidden>
   <div class="gate-box">
     <img class="gate-logo on-light" src="assets/img/logo.png" alt="Everstone Digital"/>
     <img class="gate-logo on-dark" src="assets/img/logo-white.png" alt="Everstone Digital"/>
     <h1>Lead Tracker</h1>
-    <p>Private pipeline. Sign in to continue.</p>
-    <div id="googleBtn" style="display:flex;justify-content:center"></div>
-    <div class="gate-or" id="gateOr" hidden>or</div>
-    <div class="col">
-      <input class="input" id="gatePw" type="password" placeholder="Password" autocomplete="current-password"/>
-      <button class="btn btn-primary" id="gateSubmit" style="width:100%">Unlock</button>
+    <p id="gateSub">Sign in with your email — we send you a one-time code. No password to remember.</p>
+    <div class="gate-invite" id="gateInvite" hidden></div>
+
+    <div class="gate-step" id="gs-email">
+      <div id="googleWrap" hidden>
+        <div id="googleBtn" class="google-slot"></div>
+        <div class="gate-or" id="gateOr" hidden><span>or</span></div>
+      </div>
+      <div class="col">
+        <input class="input" id="gateEmail" type="email" inputmode="email" autocomplete="email" placeholder="you@company.com" aria-label="Email"/>
+        <button class="btn btn-primary btn-block" data-act="gate-send-code">Email me a code</button>
+      </div>
     </div>
+
+    <div class="gate-step" id="gs-code" hidden>
+      <div class="small">We sent a code to <b id="gateCodeEmail"></b></div>
+      <input class="input otp-input" id="gateCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="······" aria-label="6-digit code"/>
+      <button class="btn btn-primary btn-block" data-act="gate-verify">Sign in</button>
+      <div class="gate-links"><button class="btn btn-ghost btn-sm" data-act="gate-back">Different email</button><button class="btn btn-ghost btn-sm" data-act="gate-resend">Send a new code</button></div>
+      <div class="tiny muted">Not there? Look in spam or promotions. The code works for 10 minutes.</div>
+    </div>
+
+    <div class="gate-step" id="gs-request" hidden>
+      <div class="small"><b id="gateReqEmail"></b> is verified but does not have access yet.</div>
+      <input class="input" id="gateReqName" placeholder="Your name" autocomplete="name"/>
+      <textarea class="textarea" id="gateReqNote" rows="3" placeholder="Who you are, or who sent you (optional)"></textarea>
+      <button class="btn btn-primary btn-block" data-act="gate-request">Ask for access</button>
+      <button class="btn btn-ghost btn-sm" data-act="gate-back">Back</button>
+    </div>
+
+    <div class="gate-step" id="gs-pending" hidden>
+      <div class="gate-big">⏳</div>
+      <div class="small">Your request is with the admin. You will get an email at <b id="gatePendingEmail"></b> as soon as it is approved — then sign in here with the same address.</div>
+      <button class="btn btn-ghost btn-sm" data-act="gate-back">Back to sign-in</button>
+    </div>
+
     <div class="gate-err" id="gateErr" role="alert"></div>
-    <button class="btn btn-ghost btn-sm" id="gateSetup" style="margin-top:8px">Change backend URL</button>
+
+    <details class="gate-more" id="gateMore">
+      <summary>Other ways to sign in</summary>
+      <div class="col" id="gatePwBlock">
+        <input class="input" id="gatePw" type="password" placeholder="Owner password" autocomplete="current-password"/>
+        <button class="btn btn-block" id="gateSubmit">Unlock with password</button>
+      </div>
+      <div class="col">
+        <input class="input" id="gateKey" placeholder="Access key (eva_…)" autocomplete="off"/>
+        <button class="btn btn-block" data-act="gate-key">Use access key</button>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="gateSetup">Change backend URL</button>
+    </details>
   </div>
 </div>
+
+<!-- ═══ PUBLIC BOOKING PAGE (?book=…) ═══ -->
+<div id="bookingRoot" hidden></div>
 
 <!-- ═══ APP ═══ -->
 <div class="app" id="app">
@@ -96,6 +145,7 @@
       <img class="brand-mark on-dark" src="assets/img/mark-white.png" alt="Everstone Digital"/>
       <div class="brand-name">Everstone <span>Leads</span></div>
     </div>
+    <button class="ws-switch" id="wsSwitch" hidden></button>
 
     <div class="recent-strip" id="recentStrip"></div>
     <div class="topbar-spacer"></div>
@@ -109,6 +159,7 @@
     <button class="btn btn-ghost btn-icon" id="btnSync" title="Sync now"><svg><use href="#ic-sync"/></svg></button>
     <button class="btn btn-ghost btn-icon" id="btnTheme" title="Light / dark">🌙</button>
     <button class="btn btn-primary" id="btnAddLead"><svg><use href="#ic-plus"/></svg><span class="label">Add lead</span></button>
+    <button class="me-btn" id="btnMe" title="Account"><span>·</span></button>
   </header>
 
   <div class="layout">
@@ -122,9 +173,9 @@
       <button class="nav-item" data-page="notes"><span class="ico"><svg width="16" height="16"><use href="#ic-notes"/></svg></span><span class="label">Notes</span><span class="badge" id="nb-notes">0</span></button>
 
       <div class="nav-group">Insight</div>
+      <button class="nav-item" data-page="reports"><span class="ico"><svg width="16" height="16"><use href="#ic-report"/></svg></span><span class="label">Reports</span></button>
       <button class="nav-item" data-page="history"><span class="ico"><svg width="16" height="16"><use href="#ic-history"/></svg></span><span class="label">History</span></button>
-      <button class="nav-item" data-page="analytics"><span class="ico"><svg width="16" height="16"><use href="#ic-analytics"/></svg></span><span class="label">Analytics</span></button>
-      <button class="nav-item" data-page="ai"><span class="ico"><svg width="16" height="16"><use href="#ic-ai"/></svg></span><span class="label">Evo AI</span></button>
+      <button class="nav-item" data-page="ai"><span class="ico"><svg width="16" height="16"><use href="#ic-ai"/></svg></span><span class="label" data-ai-name>Everstone Digital AI</span></button>
 
       <div class="nav-group">Library</div>
       <button class="nav-item" data-page="messages"><span class="ico"><svg width="16" height="16"><use href="#ic-messages"/></svg></span><span class="label">Messages</span></button>
@@ -132,8 +183,11 @@
       <button class="nav-item" data-page="archive"><span class="ico"><svg width="16" height="16"><use href="#ic-archive"/></svg></span><span class="label">Archive</span><span class="badge" id="nb-archive">0</span></button>
 
       <div style="flex:1"></div>
+      <button class="nav-item" data-page="admin" id="navAdmin" hidden><span class="ico"><svg width="16" height="16"><use href="#ic-shield"/></svg></span><span class="label">Admin</span><span class="badge" id="nb-admin">0</span></button>
       <button class="nav-item" data-page="settings"><span class="ico"><svg width="16" height="16"><use href="#ic-settings"/></svg></span><span class="label">Settings</span></button>
+      <button class="nav-item nav-collapse" id="btnCollapse" title="Collapse the menu"><span class="ico"><svg width="16" height="16"><use href="#ic-sidebar"/></svg></span><span class="label">Collapse</span></button>
     </nav>
+    <div class="nav-shade" id="navShade"></div>
 
     <main class="content">
 
@@ -145,6 +199,8 @@
             <p class="page-sub" id="todaySub"></p>
           </div>
           <div class="page-actions">
+            <span class="live-clock" data-live-clock></span>
+            <button class="btn" data-act="today-report" id="btnTodayReport"><svg><use href="#ic-report"/></svg>Today’s numbers</button>
             <button class="btn" id="btnBriefTg"><svg><use href="#ic-tg"/></svg>Send me the brief</button>
           </div>
         </div>
@@ -175,10 +231,26 @@
             <svg class="search-ico"><use href="#ic-search"/></svg>
             <input class="input" id="fSearch" type="search" placeholder="Search name, phone, site, notes…"/>
           </div>
+          <button class="btn filter-toggle" id="btnFilters" type="button"><svg><use href="#ic-filter"/></svg><span>Filters</span><b id="filterCount"></b></button>
           <select class="select" id="fStage"><option value="">All stages</option></select>
           <select class="select" id="fPriority"><option value="">All priorities</option></select>
           <select class="select" id="fSource"><option value="">All sources</option></select>
           <select class="select" id="fLabel"><option value="">All labels</option></select>
+          <select class="select" id="fAdded" title="When the lead was added">
+            <option value="">Added: any time</option>
+            <option value="today">Added today</option>
+            <option value="yesterday">Added yesterday</option>
+            <option value="7d">Added in the last 7 days</option>
+            <option value="week">Added this week</option>
+            <option value="lastweek">Added last week</option>
+            <option value="month">Added this month</option>
+            <option value="lastmonth">Added last month</option>
+            <option value="2months">Added in the last 2 months</option>
+            <option value="3months">Added in the last 3 months</option>
+            <option value="custom">Added between…</option>
+          </select>
+          <span class="date-pair" id="fAddedCustom" hidden><input class="input" type="date" id="fAddedFrom" aria-label="Added from"/><span class="muted">–</span><input class="input" type="date" id="fAddedTo" aria-label="Added to"/></span>
+          <select class="select" id="fOwner" hidden><option value="">Anyone's leads</option></select>
           <select class="select" id="fHealth">
             <option value="">Any health</option>
             <option value="open">Open only (hide closed)</option>
@@ -204,6 +276,7 @@
           <button class="btn btn-ghost btn-sm" id="btnClearFilters">Clear</button>
         </div>
 
+        <div class="range-note" id="addedNote" hidden></div>
         <div class="pill-row" id="stagePills" style="margin-bottom:12px"></div>
         <div class="reorder-hint" id="reorderHint" hidden></div>
         <div class="lead-list" id="leadsList"></div>
@@ -257,17 +330,61 @@
             <button class="btn btn-primary" id="btnAddMeeting"><svg><use href="#ic-plus"/></svg>Schedule meeting</button>
           </div>
         </div>
+        <div class="meet-range">
+          <select class="select" id="meetRange" title="Which dates">
+            <option value="">Any date</option>
+            <option value="today">Today</option>
+            <option value="next7">Next 7 days</option>
+            <option value="week">This week</option>
+            <option value="lastweek">Last week</option>
+            <option value="7d">Last 7 days</option>
+            <option value="month">This month</option>
+            <option value="lastmonth">Last month</option>
+            <option value="2months">Last 2 months</option>
+            <option value="3months">Last 3 months</option>
+            <option value="custom">Between dates…</option>
+          </select>
+          <span class="date-pair" id="meetRangeCustom" hidden><input class="input" type="date" id="meetFrom" aria-label="From"/><span class="muted">–</span><input class="input" type="date" id="meetTo" aria-label="To"/></span>
+          <span class="range-note" id="meetRangeNote" hidden></span>
+        </div>
         <div class="pill-row" id="meetFilters" style="margin-bottom:14px"></div>
         <div id="meetingsList"></div>
+      </section>
+
+      <!-- REPORTS -->
+      <section class="page" id="page-reports">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Reports</h1>
+            <p class="page-sub" id="repSub">What happened, day by day.</p>
+          </div>
+          <div class="page-actions">
+            <span class="live-clock" data-live-clock></span>
+            <button class="btn" data-act="rep-tg"><svg><use href="#ic-tg"/></svg><span class="label">Telegram</span></button>
+            <button class="btn btn-primary" data-act="rep-export"><svg><use href="#ic-download"/></svg>Export</button>
+          </div>
+        </div>
+        <div class="insight-tabs" role="tablist">
+          <button class="insight-tab active" data-act="insight-tab" data-value="reports" role="tab">By date</button>
+          <button class="insight-tab" data-act="insight-tab" data-value="analytics" role="tab">Pipeline overview</button>
+        </div>
+        <div id="repRoot"></div>
       </section>
 
       <!-- ANALYTICS -->
       <section class="page" id="page-analytics">
         <div class="page-head">
           <div>
-            <h1 class="page-title">Analytics</h1>
-            <p class="page-sub">Leading indicators first — those are the ones you can still change.</p>
+            <h1 class="page-title">Reports</h1>
+            <p class="page-sub">Where every lead stands right now — tap any number to see the leads behind it.</p>
           </div>
+          <div class="page-actions">
+            <span class="live-clock" data-live-clock></span>
+          </div>
+        </div>
+        <div class="insight-tabs" role="tablist">
+          <button class="insight-tab" data-act="insight-tab" data-value="reports" role="tab">By date</button>
+          <button class="insight-tab active" data-act="insight-tab" data-value="analytics" role="tab">Pipeline overview</button>
         </div>
         <div class="stat-grid" id="analyticsStats"></div>
         <div class="chart-grid" id="analyticsCharts"></div>
@@ -277,7 +394,7 @@
       <section class="page" id="page-ai">
         <div class="page-head">
           <div>
-            <h1 class="page-title">Evo</h1>
+            <h1 class="page-title" data-ai-name>Everstone Digital AI</h1>
             <p class="page-sub" id="aiSub">Knows your whole pipeline. Ask in Bangla or English.</p>
           </div>
           <div class="page-actions">
@@ -303,7 +420,7 @@
               <div class="ai-inputrow">
                 <button class="btn btn-icon" id="btnAiAttach" title="Attach image or file"><svg><use href="#ic-paperclip"/></svg></button>
                 <input type="file" id="aiFileInput" hidden multiple accept="image/*,.txt,.csv,.md,.json,.html"/>
-                <textarea class="textarea" id="aiInput" rows="1" placeholder="Ask anything, or tell Evo what to do…"></textarea>
+                <textarea class="textarea" id="aiInput" rows="1" placeholder="Ask anything, or tell Everstone Digital AI what to do…"></textarea>
                 <button class="btn btn-primary btn-icon" id="btnAiSend" title="Send"><svg><use href="#ic-send"/></svg></button>
               </div>
             </div>
@@ -420,12 +537,26 @@
         </div>
       </section>
 
+      <!-- ADMIN -->
+      <section class="page" id="page-admin">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Admin</h1>
+            <p class="page-sub">People, accounts, AI keys and everything that runs on its own.</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-primary" data-act="admin-invite"><svg><use href="#ic-plus"/></svg>Give someone access</button>
+          </div>
+        </div>
+        <div id="adminBody"></div>
+      </section>
+
       <!-- SETTINGS -->
       <section class="page" id="page-settings">
         <div class="page-head">
           <div>
             <h1 class="page-title">Settings</h1>
-            <p class="page-sub">Everything here is shared with the sheet, so it follows you to any device.</p>
+            <p class="page-sub">Settings for this account — saved to its sheet, so they follow you to any device.</p>
           </div>
           <div class="page-actions">
             <button class="btn" id="btnBackupNow">Back up now</button>
@@ -438,6 +569,15 @@
     </main>
   </div>
 </div>
+
+<!-- ═══ PHONE NAVIGATION ═══ -->
+<nav class="mnav" id="mnav" aria-label="Main">
+  <button class="mnav-item" data-page="today"><svg><use href="#ic-today"/></svg><span>Today</span><i class="mbadge" id="mnb-today"></i></button>
+  <button class="mnav-item" data-page="leads"><svg><use href="#ic-leads"/></svg><span>Leads</span></button>
+  <button class="mnav-item" data-page="pipeline"><svg><use href="#ic-pipeline"/></svg><span>Pipeline</span></button>
+  <button class="mnav-item" data-page="followups"><svg><use href="#ic-followup"/></svg><span>Follow-ups</span><i class="mbadge" id="mnb-followups"></i></button>
+  <button class="mnav-item" id="mnavMore"><svg><use href="#ic-more"/></svg><span>More</span></button>
+</nav>
 
 <!-- ═══ BULK ACTION BAR ═══ -->
 <div class="bulkbar" id="bulkbar">
@@ -454,6 +594,7 @@
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Lead detail">
   <div class="drawer-head">
+    <button class="btn btn-sm drawer-back" id="drawerBack" data-act="drawer-back" hidden>‹ Back to the list</button>
     <div class="grow" style="min-width:0">
       <div class="drawer-title" id="drawerTitle">—</div>
       <div class="drawer-sub" id="drawerSub"></div>
@@ -470,7 +611,7 @@
     <button class="drawer-tab" data-tab="timeline">Timeline</button>
     <button class="drawer-tab" data-tab="meetings">Meetings</button>
     <button class="drawer-tab" data-tab="docs">Docs</button>
-    <button class="drawer-tab" data-tab="evo">Ask Evo</button>
+    <button class="drawer-tab" data-tab="evo">Ask AI</button>
   </div>
   <div class="drawer-body">
     <div class="drawer-pane active" id="pane-overview"></div>
@@ -505,10 +646,14 @@
 <div class="toasts" id="toasts"></div>
 <audio id="alarmAudio" preload="auto"></audio>
 
+<script src="assets/js/config.js"></script>
 <script src="assets/js/core.js"></script>
 <script src="assets/js/views.js"></script>
 <script src="assets/js/ai.js"></script>
 <script src="assets/js/main.js"></script>
+<script src="assets/js/platform.js"></script>
+<script src="assets/js/reports.js"></script>
+<script src="assets/js/booking.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>
 </html>

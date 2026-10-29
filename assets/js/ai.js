@@ -1,10 +1,11 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   ai.js — Evo: conversations, attachments, audits, drafting, exports
+   ai.js — the AI assistant: conversations, attachments, audits, drafting, exports
    Chats live on the sheet, not in this browser, so they follow you to any device.
    ═══════════════════════════════════════════════════════════════════════════ */
 'use strict';
 
 var Ai = {
+  status: null,
   chats: [],
   activeChatId: null,
   messages: [],
@@ -23,6 +24,7 @@ var AI_SUGGESTIONS = [
 
 /* ─── chat list ─────────────────────────────────────────────────────────── */
 function loadChats() {
+  if (!Ai.status) api('aiStatus', {}).then(function (r) { if (r && r.success) { Ai.status = r; if (!Ai.messages.length) renderThread(); } });
   return api('aiChats').then(function (res) {
     if (res && res.success) {
       Ai.chats = res.chats || [];
@@ -99,10 +101,17 @@ function renderThread() {
   if (!host) return;
 
   if (!Ai.messages.length && !Ai.busy) {
+    if (Ai.status && !Ai.status.configured) {
+      host.innerHTML = '<div style="margin:auto;text-align:center;max-width:380px;color:var(--ink-3)">' +
+        '<div style="font-size:26px;margin-bottom:8px">◆</div><div style="font-weight:640;color:var(--ink-2);font-size:14px">' + esc(aiName()) + ' has no AI key yet</div>' +
+        '<div class="small" style="margin-top:5px">' + (isAdminUser() ? 'Add a provider — OpenRouter, Gemini, Groq or any other — and every account can use it.' : 'Ask the admin to add an AI provider.') + '</div>' +
+        (isAdminUser() ? '<button class="btn btn-primary btn-sm" data-act="go-admin" data-value="ai" style="margin-top:12px">Add a provider</button>' : '') + '</div>';
+      return;
+    }
     host.innerHTML =
       '<div style="margin:auto;text-align:center;max-width:380px;color:var(--ink-3)">' +
       '<div style="font-size:26px;margin-bottom:8px">◆</div>' +
-      '<div style="font-weight:640;color:var(--ink-2);font-size:14px">Evo is ready</div>' +
+      '<div style="font-weight:640;color:var(--ink-2);font-size:14px">' + esc(aiName()) + ' is ready</div>' +
       '<div class="small" style="margin-top:5px">Ask about any lead, or tell it what to change. It can move stages, set follow-ups, book meetings and write client messages.</div>' +
       '</div>';
     return;
@@ -135,14 +144,19 @@ function aiBubble(role, content, meta) {
   }
 
   var done = '';
+  if (meta && meta.steps && meta.steps.length) {
+    done += '<div class="ai-steps">' + meta.steps.map(function (st) {
+      return '<span>' + icon('search', 10) + ' ' + esc(st) + '</span>';
+    }).join('') + '</div>';
+  }
   if (meta && meta.done && meta.done.length) {
-    done = '<div class="ai-done">' + meta.done.map(function (d) {
+    done += '<div class="ai-done">' + meta.done.map(function (d) {
       return '<span>✓ ' + esc(d) + '</span>';
     }).join('') + '</div>';
   }
 
   return '<div class="ai-msg ' + (isUser ? 'user' : 'bot') + '">' +
-    '<div class="ai-avatar">' + (isUser ? 'N' : '◆') + '</div>' +
+    '<div class="ai-avatar">' + (isUser ? esc(initialsOf((State.me && (State.me.name || State.me.email)) || Cfg.who || 'Me').charAt(0)) : '◆') + '</div>' +
     '<div class="ai-bubble">' + body + done + tools + '</div></div>';
 }
 
@@ -203,15 +217,15 @@ function sendAiMessage(textOverride) {
     Ai.messages.push({
       role: 'assistant',
       content: res.reply || '',
-      meta: { done: res.done || [], model: res.model },
+      meta: { done: res.done || [], steps: res.steps || [], model: res.model },
       createdAt: new Date().toISOString()
     });
     renderThread();
 
-    // Evo can change the sheet, so pull the truth back in when it did.
+    // The AI can change the sheet, so pull the truth back in when it did.
     if (res.done && res.done.length) {
       pullFromServer(true);
-      toast('Evo made ' + res.done.length + ' change' + (res.done.length > 1 ? 's' : ''), 'good');
+      toast(aiName() + ' made ' + res.done.length + ' change' + (res.done.length > 1 ? 's' : ''), 'good');
     }
   });
 }
@@ -266,7 +280,7 @@ function renderDrawerEvo(lead) {
   ];
 
   host.innerHTML =
-    '<div class="tiny muted" style="margin-bottom:12px">Evo can see everything about ' + esc(lead.name) +
+    '<div class="tiny muted" style="margin-bottom:12px">' + esc(aiName()) + ' can see everything about ' + esc(lead.name) +
     ' — notes, meetings and every change ever made.</div>' +
 
     '<div class="ai-suggestions" style="margin-bottom:12px">' + quick.map(function (q) {
@@ -300,8 +314,8 @@ function askLeadEvo(leadId, question) {
     LeadEvo.busy = false;
     LeadEvo.messages.push({
       role: 'assistant',
-      content: (res && res.success) ? res.reply : 'Could not reach Evo. ' + ((res && res.error) || ''),
-      meta: { done: (res && res.done) || [] }
+      content: (res && res.success) ? res.reply : 'Could not reach ' + aiName() + '. ' + ((res && res.error) || ''),
+      meta: { done: (res && res.done) || [], steps: (res && res.steps) || [] }
     });
     if (res && res.done && res.done.length) pullFromServer(true);
     renderDrawer();
@@ -327,32 +341,75 @@ function runAudit(leadId) {
       openModal({
         title: 'Audit failed',
         body: '<p class="small">' + esc((res && res.error) || 'No response.') + '</p>' +
-          '<p class="small muted">If the site blocks automated requests this will not work. You can still paste the page text into Evo directly.</p>',
+          '<p class="small muted">If the site blocks automated requests this will not work. You can still paste the page text into the AI chat directly.</p>',
         foot: '<button class="btn" data-act="close-modal">Close</button>'
       });
       return;
     }
 
-    var s = res.signals || {};
-    var page = s.page || {}, speed = s.speed || {};
-    var signalHtml = '<div class="card" style="margin-bottom:14px"><div class="card-body" style="padding:12px">' +
-      '<div class="bar-row" style="grid-template-columns:1fr auto;margin-bottom:4px"><span class="tiny muted">Title</span><span class="tiny">' + esc(page.title || '—') + '</span></div>' +
-      '<div class="bar-row" style="grid-template-columns:1fr auto;margin-bottom:4px"><span class="tiny muted">Words on page</span><span class="tiny">' + esc(page.wordCount || 0) + '</span></div>' +
-      '<div class="bar-row" style="grid-template-columns:1fr auto;margin-bottom:4px"><span class="tiny muted">Images missing alt</span><span class="tiny">' + esc((page.imgNoAlt || 0) + ' / ' + (page.imgTotal || 0)) + '</span></div>' +
-      (speed.ok ? '<div class="bar-row" style="grid-template-columns:1fr auto;margin-bottom:4px"><span class="tiny muted">PageSpeed mobile</span><span class="tiny">perf ' + esc(speed.performance) + ' · SEO ' + esc(speed.seo) + ' · a11y ' + esc(speed.accessibility) + '</span></div>' : '') +
-      (page.jsHeavy ? '<div class="tiny" style="color:var(--warm);margin-top:6px">This site renders with JavaScript, so the crawler saw very little text. The audit accounts for that.</div>' : '') +
-      '</div></div>';
+    showAuditResult(res, lead, leadId);
+  });
+}
 
-    openModal({
-      title: 'Audit — ' + prettyUrl(lead.site),
-      wide: true,
-      body: signalHtml +
-        '<div style="white-space:pre-wrap;font-size:13.5px;line-height:1.7" id="auditText">' + esc(res.audit) + '</div>',
-      foot: '<span class="spread tiny muted">' + esc(res.model || '') + '</span>' +
-        '<button class="btn" data-act="copy" data-value="' + esc(res.audit) + '">Copy</button>' +
-        '<button class="btn" data-act="audit-save-doc" data-id="' + esc(leadId) + '">Save as document</button>' +
-        '<button class="btn btn-primary" data-act="audit-export" data-id="' + esc(leadId) + '">Download as PDF</button>',
-      data: { auditText: res.audit, auditUrl: res.url }
+var AUDIT_CATS = [['technical', 'Technical'], ['onpage', 'On-page'], ['content', 'Content'], ['local', 'Local'], ['conversion', 'Conversion'], ['speed', 'Speed']];
+
+function scoreTone(n) { return n >= 80 ? 'good' : n >= 55 ? 'warm' : 'hot'; }
+
+function showAuditResult(res, lead, leadId) {
+  var sc = res.scores || {};
+  var checks = res.checks || [];
+  var sig = res.signals || {};
+  var page = sig.page || {}, mob = sig.speed || {}, desk = sig.speedDesktop || {};
+  var fails = checks.filter(function (c) { return c.level === 'fail'; });
+  var warns = checks.filter(function (c) { return c.level === 'warn'; });
+  var passes = checks.filter(function (c) { return c.level === 'pass'; });
+
+  var ring = '<div class="audit-score ' + scoreTone(sc.overall || 0) + '"><b>' + (sc.overall || 0) + '</b><span>/100</span></div>';
+  var bars = AUDIT_CATS.filter(function (c) { return sc[c[0]] !== undefined; }).map(function (c) {
+    var v = sc[c[0]];
+    return '<div class="bar-row"><span class="small">' + c[1] + '</span><div class="bar-track"><div class="bar-fill tone-' + scoreTone(v) + '" style="width:' + v + '%"></div></div><span class="bar-val">' + v + '</span></div>';
+  }).join('');
+  var facts = [
+    page.title ? ['Title', page.title] : null,
+    ['Words on the home page', page.wordCount || 0],
+    page.imgTotal ? ['Images missing alt text', (page.imgNoAlt || 0) + ' of ' + page.imgTotal] : null,
+    mob && mob.ok ? ['PageSpeed mobile', 'performance ' + mob.performance + ' · SEO ' + mob.seo + (mob.lcp ? ' · LCP ' + mob.lcp : '')] : null,
+    desk && desk.ok ? ['PageSpeed desktop', 'performance ' + desk.performance] : null,
+    res.pages ? ['Pages checked', (res.pages.length || 0) + (res.broken && res.broken.length ? ' · ' + res.broken.length + ' broken links' : '')] : null,
+    res.sitemap ? ['Sitemap', res.sitemap.found ? 'found' + (res.sitemap.urls ? ' (' + res.sitemap.urls + ' URLs)' : '') : 'missing'] : null
+  ].filter(Boolean);
+
+  function checkList(list, cls) {
+    return list.map(function (c) {
+      return '<div class="check-item ' + cls + '"><span class="ci-dot"></span><div class="grow"><div class="ci-title">' + esc(c.title) + ' <span class="chip chip-ghost">' + esc(c.cat) + '</span></div>' +
+        (c.detail ? '<div class="tiny muted">' + esc(c.detail) + '</div>' : '') + (c.fix ? '<div class="tiny ci-fix">Fix: ' + esc(c.fix) + '</div>' : '') + '</div></div>';
+    }).join('');
+  }
+
+  State.ui.lastAudit = { leadId: leadId, text: res.audit || '' };
+  openModal({
+    title: 'Audit — ' + prettyUrl(res.url || lead.site),
+    wide: true,
+    body:
+      '<div class="audit-top">' + ring + '<div class="grow">' + bars + '</div></div>' +
+      (page.jsHeavy ? '<div class="tiny" style="color:var(--warm)">This site builds itself with JavaScript, so a crawler sees little text. The audit accounts for that.</div>' : '') +
+      '<div class="audit-tabs pill-row"><button class="pill active" data-audit-tab="report">AI report</button><button class="pill" data-audit-tab="checks">Checks (' + fails.length + ' to fix · ' + warns.length + ' to improve)</button><button class="pill" data-audit-tab="facts">Measured</button></div>' +
+      '<div class="audit-pane" data-pane="report">' + (res.audit ? '<div class="prose-box" id="auditText">' + esc(res.audit) + '</div>' : '<div class="small" style="color:var(--warm)">' + esc(aiName()) + ' could not write the report (' + esc(res.aiError || 'no AI') + '). The measured checks are still here.</div>') + '</div>' +
+      '<div class="audit-pane" data-pane="checks" hidden>' + checkList(fails, 'fail') + checkList(warns, 'warn') +
+      (passes.length ? '<details class="passed"><summary class="small">' + passes.length + ' things already right</summary>' + checkList(passes, 'pass') + '</details>' : '') + '</div>' +
+      '<div class="audit-pane" data-pane="facts" hidden><div class="kv">' + facts.map(function (f) { return '<dt>' + esc(f[0]) + '</dt><dd>' + esc(String(f[1])) + '</dd>'; }).join('') + '</div></div>',
+    foot: '<span class="spread tiny muted">' + esc(res.model || '') + '</span>' +
+      '<button class="btn" data-act="copy" data-value="' + esc(res.audit || '') + '">Copy</button>' +
+      '<button class="btn" data-act="audit-save-doc" data-id="' + esc(leadId) + '">Save to lead</button>' +
+      '<button class="btn" data-act="proposal-draft" data-id="' + esc(leadId) + '">Proposal from this</button>' +
+      '<button class="btn btn-primary" data-act="audit-export" data-id="' + esc(leadId) + '">Download PDF</button>',
+    data: { auditText: res.audit || checks.filter(function (c) { return c.level !== 'pass'; }).map(function (c) { return '- ' + c.title + (c.fix ? ' — ' + c.fix : ''); }).join('\n'), auditUrl: res.url },
+    noFocus: true
+  });
+  $$('#modalBody [data-audit-tab]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      $$('#modalBody [data-audit-tab]').forEach(function (x) { x.classList.toggle('active', x === b); });
+      $$('#modalBody .audit-pane').forEach(function (p) { p.hidden = p.dataset.pane !== b.dataset.auditTab; });
     });
   });
 }
@@ -369,7 +426,7 @@ function composeEmail(leadId) {
       '<div class="field"><label>To</label><input class="input" id="emTo" value="' + esc(lead.email || '') + '" placeholder="name@company.com"/></div>' +
       '<div class="field"><label>What should this email do?</label>' +
       '<input class="input" id="emBrief" placeholder="e.g. nudge them on the proposal without sounding desperate"/></div>' +
-      '<div class="row"><button class="btn btn-primary btn-sm" data-act="em-generate" data-id="' + esc(leadId) + '">Write it with Evo</button>' +
+      '<div class="row"><button class="btn btn-primary btn-sm" data-act="em-generate" data-id="' + esc(leadId) + '">Write it with AI</button>' +
       '<span class="tiny muted">Nothing is sent until you press Send.</span></div>' +
       '<hr class="divider"/>' +
       '<div class="field"><label>Subject</label><input class="input" id="emSubject"/></div>' +
@@ -455,7 +512,7 @@ function runExport() {
 /* ─── custom instructions ───────────────────────────────────────────────── */
 function openAiInstructions() {
   openModal({
-    title: 'Custom instructions for Evo',
+    title: 'Custom instructions for ' + aiName(),
     body:
       '<p class="small muted">Written here once, obeyed in every conversation, every daily brief and every draft.</p>' +
       '<div class="field"><label>Standing instructions</label>' +

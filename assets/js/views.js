@@ -138,7 +138,8 @@ function recentStamp(iso) {
 function renderToday() {
   var greet = $('#todayGreeting'), sub = $('#todaySub');
   var hour = new Date().getHours();
-  var name = (Cfg.who && Cfg.who.indexOf('@') > 0) ? Cfg.who.split('@')[0] : 'Nayem';
+  var me = State.me || Cfg.me || {};
+  var name = (me.name || brand().person || (me.email || Cfg.who || '').split('@')[0] || 'there').split(' ')[0];
   if (greet) {
     greet.textContent = (hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening') +
       ', ' + name.charAt(0).toUpperCase() + name.slice(1);
@@ -165,7 +166,7 @@ function renderToday() {
     stats.innerHTML = [
       statCard('Needs you now', due.length, due.length ? 'follow-ups due or late' : 'all clear', 'var(--hot)', 'health', 'due'),
       statCard('No next step', noNext.length, noNext.length ? 'these go quiet next' : 'every lead has a date', 'var(--warm)', 'health', 'nonext'),
-      statCard('Meetings today', meetsToday.length, needOutcome.length ? needOutcome.length + ' awaiting outcome' : 'scheduled', 'var(--info)', 'page', 'meetings'),
+      statCard('Meetings today', meetsToday.length, needOutcome.length ? needOutcome.length + ' awaiting outcome' : 'scheduled', 'var(--info)', 'meetings', 'today'),
       statCard('Proposals out', proposals.length, proposals.length ? 'waiting on a reply' : 'none pending', 'var(--accent)', 'health', 'proposal'),
       statCard('Open pipeline', Fmt.compactMoney(open.reduce(function (s, l) { return s + (Number(l.value) || 0); }, 0)), open.length + ' live leads', 'var(--good)', 'page', 'leads')
     ].join('');
@@ -175,6 +176,12 @@ function renderToday() {
   if (!board) return;
 
   var blocks = [];
+
+  if (typeof adminPendingBanner === 'function') {
+    var banner = adminPendingBanner();
+    if (banner) blocks.push(banner);
+  }
+  blocks.push(evoPlanCard());
 
   if (needOutcome.length) {
     blocks.push(cardBlock('Log what happened', needOutcome.length + ' meeting' + (needOutcome.length > 1 ? 's have' : ' has') + ' passed without an outcome',
@@ -219,8 +226,45 @@ function renderToday() {
   board.innerHTML = blocks.join('');
 }
 
-function statCard(label, value, note, color, actKind, actValue) {
-  return '<div class="stat" style="--stat-accent:' + color + '" data-act="stat" data-kind="' + esc(actKind) + '" data-value="' + esc(actValue) + '">' +
+/**
+ * "Plan my day" — the AI picks who to contact today, says why, and writes the
+ * message. Nothing runs until asked, so it costs nothing on an ordinary visit.
+ */
+function evoPlanCard() {
+  if (!canSee('ai')) return '';
+  var plan = State.ui.evoPlan;
+  var head = '<div class="card evo-plan" style="margin-bottom:14px">' +
+    '<div class="card-head"><div class="card-title">' + icon('ai', 14) + ' AI plan for today</div>' +
+    '<div class="row" style="gap:6px">' +
+    (plan && plan.items ? '<span class="tiny muted">' + esc(plan.model || '') + '</span>' : '') +
+    '<button class="btn btn-sm' + (plan ? '' : ' btn-primary') + '" data-act="evo-plan"' + (State.ui.evoPlanBusy ? ' disabled' : '') + '>' +
+    (State.ui.evoPlanBusy ? 'Thinking…' : plan ? 'Plan again' : 'Plan my day') + '</button></div></div>';
+  if (State.ui.evoPlanBusy && !plan) {
+    return head + '<div class="card-body"><span class="typing"><i></i><i></i><i></i></span> <span class="small muted">Reading your pipeline…</span></div></div>';
+  }
+  if (!plan) {
+    return head + '<div class="card-body small muted">' + esc(aiName()) + ' reads every open lead and tells you who to contact first, why, and what to send. One tap.</div></div>';
+  }
+  if (plan.error) return head + '<div class="card-body small" style="color:var(--danger)">' + esc(plan.error) + '</div></div>';
+  return head + '<div class="card-body">' + (plan.items || []).map(function (it) {
+    var l = getLead(it.leadId);
+    if (!l) return '';
+    var ch = it.channel === 'whatsapp' ? 'wa' : it.channel === 'email' ? 'mail' : it.channel === 'meeting' ? 'meetings' : 'phone';
+    return '<div class="plan-item">' +
+      '<div class="plan-ico">' + icon(ch, 14) + '</div>' +
+      '<div class="grow"><div class="plan-head"><b class="hist-lead" data-act="open-lead" data-id="' + esc(l.id) + '">' + esc(l.name) + '</b> — ' + esc(it.action || '') + '</div>' +
+      (it.why ? '<div class="tiny muted">' + esc(it.why) + '</div>' : '') +
+      (it.message ? '<div class="plan-msg">' + esc(it.message) + '</div>' : '') + '</div>' +
+      '<div class="plan-actions">' +
+      (it.message ? '<button class="btn btn-sm btn-icon" data-act="copy" data-value="' + esc(it.message) + '" title="Copy the message">' + icon('copy', 12) + '</button>' : '') +
+      ((l.phone || l.wa) && it.message ? '<button class="btn btn-sm btn-icon" data-act="plan-wa" data-id="' + esc(l.id) + '" data-value="' + esc(it.message) + '" title="Send on WhatsApp">' + icon('wa', 12) + '</button>' : '') +
+      '<button class="btn btn-sm" data-act="done-followup" data-id="' + esc(l.id) + '">Done</button>' +
+      '</div></div>';
+  }).join('') + '</div></div>';
+}
+
+function statCard(label, value, note, color, actKind, actValue, extraAttrs) {
+  return '<div class="stat" style="--stat-accent:' + color + '" data-act="stat" data-kind="' + esc(actKind) + '" data-value="' + esc(actValue) + '"' + (extraAttrs || '') + ' tabindex="0" role="button">' +
     '<div class="stat-label">' + esc(label) + '</div>' +
     '<div class="stat-value">' + esc(value) + '</div>' +
     '<div class="stat-note">' + esc(note) + '</div></div>';
@@ -268,6 +312,15 @@ function filteredLeads() {
     if (f.priority && l.priority !== f.priority) return false;
     if (f.source && l.source !== f.source) return false;
     if (f.label && (l.labels || []).indexOf(f.label) < 0) return false;
+    if (f.added) {
+      var ar = Dates.range(f.added, f.addedFrom, f.addedTo);
+      var ad = Dates.ymdOf(l.createdAt);
+      if (ar && (!ad || ad < ar.from || ad > ar.to)) return false;
+    }
+    if (f.owner) {
+      var who = String(l.owner || '').toLowerCase();
+      if (f.owner === '__none' ? who : who !== f.owner) return false;
+    }
 
     if (f.health === 'due') { var d = dueState(l); if (d !== 'over' && d !== 'today') return false; }
     if (f.health === 'nonext' && !needsNextStep(l)) return false;
@@ -520,7 +573,7 @@ function renderStageHistory() {
     return '<div class="hist-item"><span class="hist-dot ' + (a.type === 'created' ? 'created' : 'stage') + '"></span>' +
       '<span class="hist-text"><b>' + esc(a.leadName || 'Lead') + '</b> ' +
       (a.type === 'created' ? 'was added' : 'moved ' + esc(a.oldValue || '—') + ' → ' + esc(a.newValue || '—')) +
-      (a.actor === 'evo' ? ' <span class="chip chip-ghost">Evo</span>' : '') + '</span>' +
+      actorChip(a.actor) + '</span>' +
       '<span class="hist-when">' + esc(Fmt.ago(a.at)) + '</span></div>';
   }).join('') + '</div>' : '<div class="muted small">No stage changes recorded yet.</div>';
 }
@@ -598,7 +651,8 @@ function renderMeetings() {
   if (!host) return;
 
   var today = Dates.today();
-  var all = State.meetings.slice();
+  var mr = Dates.range(State.ui.meetRange, State.ui.meetFrom, State.ui.meetTo);
+  var all = State.meetings.filter(function (m) { return !mr || (m.date && m.date >= mr.from && m.date <= mr.to); });
   var needOutcome = all.filter(function (m) { return m.status === 'upcoming' && m.date && m.date < today; });
   var upcoming = all.filter(function (m) { return m.status === 'upcoming' && m.date >= today; });
   var done = all.filter(function (m) { return m.status === 'done'; });
@@ -649,6 +703,18 @@ function renderMeetings() {
         '<button class="btn btn-primary" data-act="add-meeting">Schedule meeting</button>');
 }
 
+/** Another upcoming meeting in this account that runs into this one. */
+function meetingOverlap(m) {
+  if (m.status !== 'upcoming' || !m.date || !m.time) return null;
+  function mins(t) { var p = String(t).split(':'); return Number(p[0]) * 60 + Number(p[1] || 0); }
+  var s1 = mins(m.time), e1 = s1 + (Number(m.duration) || 45);
+  return (State.meetings || []).filter(function (o) {
+    if (o.id === m.id || o.status !== 'upcoming' || o.date !== m.date || !o.time) return false;
+    var s2 = mins(o.time), e2 = s2 + (Number(o.duration) || 45);
+    return s1 < e2 && e1 > s2;
+  })[0] || null;
+}
+
 function meetingCard(m) {
   var lead = getLead(m.leadId);
   var today = Dates.today();
@@ -682,6 +748,11 @@ function meetingCard(m) {
       '<div class="meet-title">' +
         '<button class="lead-star' + (m.star ? '' : ' off') + '" data-act="toggle-meet-star" data-id="' + esc(m.id) + '">' + icon(m.star ? 'star' : 'star-o', 13) + '</button>' +
         esc(m.title || 'Meeting') + statusChip +
+        (m.source === 'booking' ? '<span class="chip chip-info" title="Booked from your booking page">Booked online</span>' : '') +
+        (function () {
+          var o = meetingOverlap(m);
+          return o ? '<span class="chip chip-warm" title="Overlaps ' + esc(o.title || 'another meeting') + ' at ' + esc(o.time) + '">' + icon('alert', 10) + ' Overlaps ' + esc(Fmt.time(o.time)) + '</span>' : '';
+        })() +
       '</div>' +
       '<div class="meet-sub">' +
         (m.time ? '<span>' + icon('clock', 12) + ' ' + esc(Fmt.time(m.time)) + ' · ' + esc(m.duration || 45) + 'min</span>' : '') +
@@ -690,14 +761,51 @@ function meetingCard(m) {
         (m.location ? '<span>· ' + esc(m.location) + '</span>' : '') +
       '</div>' +
       (m.agenda ? '<div class="tiny muted" style="margin-top:5px">' + esc(m.agenda) + '</div>' : '') +
+      (m.guestEmail || m.guestPhone ? '<div class="tiny muted" style="margin-top:4px">Guest: ' + esc([m.guestName, m.guestEmail, m.guestPhone].filter(Boolean).join(' · ')) + '</div>' : '') +
       outcome +
     '</div>' +
     '<div class="meet-actions">' +
       (m.status === 'upcoming' ? '<button class="btn btn-sm btn-primary" data-act="meeting-outcome" data-id="' + esc(m.id) + '">Log outcome</button>' : '') +
+      (m.status === 'upcoming' ? '<button class="btn btn-sm" data-act="meeting-prep" data-id="' + esc(m.id) + '" title="The AI writes you a briefing">' + icon('ai', 12) + ' Prep</button>' : '') +
+      (m.status === 'upcoming' && m.date && !meetingInCalendar() ? '<a class="btn btn-sm" href="' + esc(gcalUrl(m)) + '" target="_blank" rel="noopener noreferrer" title="Add to your Google Calendar">' + icon('followup', 12) + ' Calendar</a>' : '') +
       '<button class="btn btn-sm" data-act="edit-meeting" data-id="' + esc(m.id) + '">Edit</button>' +
       '<button class="btn btn-sm btn-danger btn-icon" data-act="delete-meeting" data-id="' + esc(m.id) + '" title="Delete">' + icon('trash', 13) + '</button>' +
     '</div>' +
   '</article>';
+}
+
+/** Meetings land in Google Calendar automatically only in the main workspace. */
+function meetingInCalendar() {
+  var c = (State.settings && State.settings.calendar) || {};
+  return (!State.ws || State.ws.id === 'main') && c.meetings !== false;
+}
+
+/** UTC instant for a wall-clock time in a time zone (no library needed). */
+function zonedToUtc(ymd, hm, tz) {
+  var p = String(ymd).split('-').map(Number), t = String(hm || '10:00').split(':').map(Number);
+  var guess = Date.UTC(p[0], p[1] - 1, p[2], t[0] || 0, t[1] || 0);
+  function offset(at) {
+    try {
+      var parts = {};
+      new Intl.DateTimeFormat('en-US', { timeZone: tz, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        .formatToParts(new Date(at)).forEach(function (x) { parts[x.type] = x.value; });
+      return Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour % 24, +parts.minute, +parts.second) - at;
+    } catch (e) { return 0; }
+  }
+  var off = offset(guess);
+  return new Date(guess - off);
+}
+
+function gcalUrl(m) {
+  var tz = (State.settings && State.settings.timezone) || 'Asia/Dhaka';
+  var start = zonedToUtc(m.date, m.time || '10:00', tz);
+  var end = new Date(start.getTime() + (Number(m.duration) || 45) * 60000);
+  function z(d) { return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''); }
+  var lead = getLead(m.leadId);
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent((m.title || 'Meeting') + (lead ? ' — ' + lead.name : '')) +
+    '&dates=' + z(start) + '/' + z(end) +
+    (m.agenda ? '&details=' + encodeURIComponent(m.agenda) : '') +
+    (m.location ? '&location=' + encodeURIComponent(m.location) : '');
 }
 
 function interestPips(n) {
@@ -710,29 +818,27 @@ function interestPips(n) {
 function renderAnalytics() {
   var leads = activeLeads();
   var open = openLeads();
-  var hired = leads.filter(function (l) { return l.stage === 'Hired'; });
+  // "Signed" means any stage in the won group (Hired, Nayem Client …), not one name.
+  var wonStage = function (s) { var m = stageMeta(s); return m.group ? m.group === 'won' : s === 'Hired'; };
+  var hired = leads.filter(function (l) { return wonStage(l.stage); });
   var dead = leads.filter(function (l) { return l.stage === 'Dead'; });
   var revenue = hired.reduce(function (s, l) { return s + (Number(l.value) || 0); }, 0);
   var pipeline = open.reduce(function (s, l) { return s + (Number(l.value) || 0); }, 0);
-  var weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+  var wk = Dates.range('7d');
+  var inWeek = function (ymd) { return ymd && ymd >= wk.from && ymd <= wk.to; };
 
-  var acts = State.activities || [];
-  var addedThisWeek = acts.filter(function (a) { return a.type === 'created' && a.at >= weekAgo; }).length;
-  var meetingsHeld = State.meetings.filter(function (m) {
-    return m.status === 'done' && m.date && m.date >= weekAgo.slice(0, 10);
-  }).length;
-  var proposalsSent = leads.filter(function (l) {
-    return l.proposalSentAt && l.proposalSentAt >= weekAgo.slice(0, 10);
-  }).length;
+  var addedThisWeek = leads.filter(function (l) { return inWeek(Dates.ymdOf(l.createdAt)); }).length;
+  var meetingsHeld = State.meetings.filter(function (m) { return m.status === 'done' && inWeek(m.date); }).length;
+  var proposalLeads = leads.filter(function (l) { return inWeek(l.proposalSentAt); });
 
   var stats = $('#analyticsStats');
   if (stats) {
     stats.innerHTML = [
-      statCard('New leads · 7d', addedThisWeek, 'what you put in', 'var(--info)', 'page', 'leads'),
-      statCard('Meetings held · 7d', meetingsHeld, 'conversations had', 'var(--accent)', 'page', 'meetings'),
-      statCard('Proposals sent · 7d', proposalsSent, 'offers on the table', 'var(--warm)', 'health', 'proposal'),
-      statCard('Open pipeline', Fmt.compactMoney(pipeline), open.length + ' live leads', 'var(--good)', 'page', 'leads'),
-      statCard('Signed', Fmt.compactMoney(revenue), hired.length + ' clients · ' + (leads.length ? Math.round(hired.length / leads.length * 100) : 0) + '% win rate', 'var(--good)', 'page', 'archive')
+      statCard('New leads · 7d', addedThisWeek, 'what you put in', 'var(--info)', 'added', '7d'),
+      statCard('Meetings held · 7d', meetingsHeld, 'conversations had', 'var(--accent)', 'meetings', '7d', ' data-filter="done"'),
+      statCard('Proposals sent · 7d', proposalLeads.length, 'offers on the table', 'var(--warm)', 'ids', proposalLeads.map(function (l) { return l.id; }).join(',')),
+      statCard('Open pipeline', Fmt.compactMoney(pipeline), open.length + ' live leads', 'var(--good)', 'health', 'open'),
+      statCard('Signed', Fmt.compactMoney(revenue), hired.length + ' clients · ' + (leads.length ? Math.round(hired.length / leads.length * 100) : 0) + '% win rate', 'var(--good)', 'ids', hired.map(function (l) { return l.id; }).join(','))
     ].join('');
   }
 
@@ -749,7 +855,7 @@ function renderAnalytics() {
     var c = counts[s] || 0;
     var m = stageMeta(s);
     var pct = Math.round(c / maxStage * 100);
-    return '<div class="funnel-step"><span class="truncate">' + esc(s) + '</span>' +
+    return '<div class="funnel-step rep-click" data-act="leads-by" data-key="stage" data-value="' + esc(s) + '" title="See the leads in ' + esc(s) + '"><span class="truncate">' + esc(s) + '</span>' +
       '<div class="funnel-bar" style="width:' + Math.max(pct, 4) + '%;background:' + esc(m.color) + '">' + (c || '') + '</div>' +
       '<span class="bar-val">' + esc(Fmt.compactMoney(leads.filter(function (l) { return l.stage === s; }).reduce(function (t, l) { return t + (Number(l.value) || 0); }, 0))) + '</span></div>';
   }).join('');
@@ -760,7 +866,7 @@ function renderAnalytics() {
     var k = l.source || 'Unknown';
     bySource[k] = bySource[k] || { total: 0, won: 0, value: 0 };
     bySource[k].total++;
-    if (l.stage === 'Hired') { bySource[k].won++; bySource[k].value += Number(l.value) || 0; }
+    if (wonStage(l.stage)) { bySource[k].won++; bySource[k].value += Number(l.value) || 0; }
   });
   var sourceKeys = Object.keys(bySource).sort(function (a, b) { return bySource[b].total - bySource[a].total; });
   var maxSource = Math.max.apply(null, sourceKeys.map(function (k) { return bySource[k].total; }).concat([1]));
@@ -768,22 +874,23 @@ function renderAnalytics() {
   var sources = sourceKeys.map(function (k) {
     var s = bySource[k];
     var rate = s.total ? Math.round(s.won / s.total * 100) : 0;
-    return '<div class="bar-row"><span class="truncate" title="' + esc(k) + '">' + esc(k) + '</span>' +
+    return '<div class="bar-row rep-click" data-act="leads-by" data-key="source" data-value="' + esc(k) + '" title="See the leads from ' + esc(k) + '"><span class="truncate" title="' + esc(k) + '">' + esc(k) + '</span>' +
       '<span class="bar-track"><span class="bar-fill" style="width:' + Math.round(s.total / maxSource * 100) + '%;background:var(--accent)"></span></span>' +
       '<span class="bar-val">' + s.total + '</span></div>' +
       '<div class="tiny muted" style="margin:-4px 0 8px 118px">' + s.won + ' won · ' + rate + '% · ' + esc(Fmt.compactMoney(s.value)) + '</div>';
   }).join('');
 
   // loss reasons
-  var reasons = {};
+  var reasons = {}, reasonIds = {};
   dead.forEach(function (l) {
     var k = l.lostReason || 'Not recorded';
     reasons[k] = (reasons[k] || 0) + 1;
+    (reasonIds[k] = reasonIds[k] || []).push(l.id);
   });
   var reasonKeys = Object.keys(reasons).sort(function (a, b) { return reasons[b] - reasons[a]; });
   var maxReason = Math.max.apply(null, reasonKeys.map(function (k) { return reasons[k]; }).concat([1]));
   var lossHtml = reasonKeys.length ? reasonKeys.map(function (k) {
-    return '<div class="bar-row"><span class="truncate" title="' + esc(k) + '">' + esc(k) + '</span>' +
+    return '<div class="bar-row rep-click" data-act="show-leads" data-ids="' + esc(reasonIds[k].join(',')) + '" data-label="' + esc('Lost: ' + k) + '" title="See these leads"><span class="truncate" title="' + esc(k) + '">' + esc(k) + '</span>' +
       '<span class="bar-track"><span class="bar-fill" style="width:' + Math.round(reasons[k] / maxReason * 100) + '%;background:var(--hot)"></span></span>' +
       '<span class="bar-val">' + reasons[k] + '</span></div>';
   }).join('') : '<div class="muted small">No losses recorded yet. When you mark a lead Dead you will be asked why — that is what fills this in.</div>';
@@ -809,7 +916,7 @@ function renderAnalytics() {
 
   charts.innerHTML =
     chartCard('Pipeline by stage', funnel) +
-    chartCard('Pipeline health', healthHtml + '<div class="tiny muted" style="margin-top:8px">Click a row to filter the lead list.</div>') +
+    chartCard('Pipeline health', healthHtml) +
     chartCard('Where leads come from', sources || '<div class="muted small">No leads yet.</div>') +
     chartCard('Why deals are lost', lossHtml);
 }
@@ -823,29 +930,35 @@ function chartCard(title, inner) {
 var TEMPLATES = [
   {
     id: 'first-touch', name: 'First touch', cat: 'Outreach',
-    body: 'Hi {{contact}},\n\nI was looking at {{site}} and noticed a few things holding back its search visibility — the kind of gaps that quietly cost enquiries every month.\n\nI put together a short breakdown of what I found. No charge, no obligation: I would rather show you something useful than pitch cold.\n\nWould it help if I sent it over?\n\nNayemuzzaman\nSEO & CRO Strategist\nEverstone Digital'
+    body: 'Hi {{contact}},\n\nI was looking at {{site}} and noticed a few things holding back its search visibility — the kind of gaps that quietly cost enquiries every month.\n\nI put together a short breakdown of what I found. No charge, no obligation: I would rather show you something useful than pitch cold.\n\nWould it help if I sent it over?\n\n{{signature}}'
   },
   {
     id: 'after-call', name: 'After the first call', cat: 'Follow-up',
-    body: 'Hi {{contact}},\n\nThanks for your time today. To recap what we agreed:\n\n• {{note}}\n\nI will have the proposal with you by {{date}}. If anything above does not match your understanding, tell me now and I will correct it before it goes into writing.\n\nNayemuzzaman\nSEO & CRO Strategist\nEverstone Digital'
+    body: 'Hi {{contact}},\n\nThanks for your time today. To recap what we agreed:\n\n• {{note}}\n\nI will have the proposal with you by {{date}}. If anything above does not match your understanding, tell me now and I will correct it before it goes into writing.\n\n{{signature}}'
   },
   {
     id: 'proposal-sent', name: 'Proposal sent', cat: 'Proposal',
-    body: 'Hi {{contact}},\n\nThe proposal for {{name}} is attached. The short version: {{service}}, and the first measurable movement should be visible within 60 to 90 days.\n\nI have kept it to the work that matters rather than a long list you would never read.\n\nHappy to walk through it on a call if that is easier than reading it.\n\nNayemuzzaman\nSEO & CRO Strategist\nEverstone Digital'
+    body: 'Hi {{contact}},\n\nThe proposal for {{name}} is attached. The short version: {{service}}, and the first measurable movement should be visible within 60 to 90 days.\n\nI have kept it to the work that matters rather than a long list you would never read.\n\nHappy to walk through it on a call if that is easier than reading it.\n\n{{signature}}'
   },
   {
     id: 'nudge', name: 'Gentle nudge', cat: 'Follow-up',
-    body: 'Hi {{contact}},\n\nJust checking in on the proposal I sent for {{name}}. No pressure at all — I know these decisions rarely sit at the top of the pile.\n\nIf the timing is wrong, tell me and I will stop chasing. If something in it gave you pause, I would genuinely rather hear that than nothing.\n\nNayemuzzaman\nSEO & CRO Strategist\nEverstone Digital'
+    body: 'Hi {{contact}},\n\nJust checking in on the proposal I sent for {{name}}. No pressure at all — I know these decisions rarely sit at the top of the pile.\n\nIf the timing is wrong, tell me and I will stop chasing. If something in it gave you pause, I would genuinely rather hear that than nothing.\n\n{{signature}}'
   },
   {
     id: 'last-call', name: 'Breakup message', cat: 'Follow-up',
-    body: 'Hi {{contact}},\n\nI have reached out a few times about {{name}} and not heard back, so I will assume the timing is not right and leave it there.\n\nIf things change later this year, you know where to find me. Either way, I hope the business goes well.\n\nNayemuzzaman\nSEO & CRO Strategist\nEverstone Digital'
+    body: 'Hi {{contact}},\n\nI have reached out a few times about {{name}} and not heard back, so I will assume the timing is not right and leave it there.\n\nIf things change later this year, you know where to find me. Either way, I hope the business goes well.\n\n{{signature}}'
   },
   {
     id: 'welcome', name: 'Welcome aboard', cat: 'Closing',
-    body: 'Hi {{contact}},\n\nDelighted to be working with you. Here is what happens next:\n\n• This week: full audit and baseline measurement\n• Week two: the fixes that move fastest\n• Month one: first progress report, plain English, no jargon\n\nYou will hear from me regularly, whether the news is good or not.\n\nNayemuzzaman\nSEO & CRO Strategist\nEverstone Digital'
+    body: 'Hi {{contact}},\n\nDelighted to be working with you. Here is what happens next:\n\n• This week: full audit and baseline measurement\n• Week two: the fixes that move fastest\n• Month one: first progress report, plain English, no jargon\n\nYou will hear from me regularly, whether the news is good or not.\n\n{{signature}}'
   }
 ];
+
+/** Built-in templates plus the ones this workspace wrote itself. */
+function allTemplates() {
+  var custom = (State.settings && Array.isArray(State.settings.templates)) ? State.settings.templates : [];
+  return custom.map(function (t) { return Object.assign({ custom: true }, t); }).concat(TEMPLATES);
+}
 
 function renderMessages() {
   var host = $('#templateList');
@@ -862,12 +975,15 @@ function renderMessages() {
 
   var lead = picker && picker.value ? getLead(picker.value) : null;
 
-  host.innerHTML = TEMPLATES.map(function (t) {
+  host.innerHTML = '<div class="row" style="margin-bottom:12px"><button class="btn btn-sm" data-act="tpl-new">' + icon('plus', 12) + ' New template</button>' +
+    '<span class="tiny muted">Placeholders: {{contact}} {{name}} {{site}} {{service}} {{note}} {{date}} {{signature}}</span></div>' +
+    allTemplates().map(function (t) {
     var body = fillTemplate(t.body, lead);
     return '<div class="card" style="margin-bottom:10px">' +
       '<div class="card-head"><div class="card-title">' + esc(t.name) +
-      '<span class="chip chip-ghost">' + esc(t.cat) + '</span></div>' +
+      '<span class="chip chip-ghost">' + esc(t.cat || 'Custom') + '</span>' + (t.custom ? '<span class="chip chip-info">yours</span>' : '') + '</div>' +
       '<div class="row" style="gap:5px">' +
+      (t.custom ? '<button class="btn btn-sm btn-icon" data-act="tpl-edit" data-id="' + esc(t.id) + '" title="Edit">' + icon('edit', 12) + '</button>' : '') +
       '<button class="btn btn-sm" data-act="tpl-copy" data-id="' + esc(t.id) + '">' + icon('copy', 12) + ' Copy</button>' +
       (lead && (lead.phone || lead.wa) ? '<button class="btn btn-sm" data-act="tpl-wa" data-id="' + esc(t.id) + '">' + icon('wa', 12) + ' WhatsApp</button>' : '') +
       (lead && lead.email ? '<button class="btn btn-sm" data-act="tpl-mail" data-id="' + esc(t.id) + '">' + icon('mail', 12) + ' Email</button>' : '') +
@@ -886,7 +1002,10 @@ function fillTemplate(body, lead) {
     phone: lead ? (lead.phone || '') : '',
     service: lead ? (lead.service || 'search and conversion work') : 'search and conversion work',
     note: lead ? (lead.nextStep || lead.notes || '—') : '—',
-    date: Fmt.date(Dates.addDays(Dates.today(), 2))
+    date: Fmt.date(Dates.addDays(Dates.today(), 2)),
+    signature: signature(),
+    me: brand().person,
+    company: brand().company
   };
   return String(body).replace(/\{\{(\w+)\}\}/g, function (m, k) {
     return map[k] !== undefined ? map[k] : m;
@@ -982,111 +1101,186 @@ function renderArchive() {
 }
 
 /* ─── SETTINGS ──────────────────────────────────────────────────────────── */
+var SETTINGS_TABS = [
+  ['general', 'General'], ['pipeline', 'Pipeline'], ['ai', 'AI assistant'], ['telegram', 'Telegram'],
+  ['booking', 'Booking page'], ['calendar', 'Calendar'], ['api', 'API & integrations'], ['data', 'Data & account']
+];
+
+function settingsTab() {
+  var t = State.ui.settingsTab;
+  if (!t) { try { t = localStorage.getItem(LS.settingsTab); } catch (e) {} }
+  return SETTINGS_TABS.some(function (x) { return x[0] === t; }) ? t : 'general';
+}
+
 function renderSettings() {
   var host = $('#settingsBody');
   if (!host) return;
+  // Re-rendering while someone is typing would throw their edits away.
+  if (host.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) && host.dataset.rendered === '1') return;
   var s = State.settings;
+  var manager = canManageWs();
+  var tabs = SETTINGS_TABS.filter(function (t) { return manager || t[0] === 'telegram' || t[0] === 'data'; });
+  var tab = settingsTab();
+  if (!tabs.some(function (t) { return t[0] === tab; })) tab = tabs[0][0];
+  var b = brand();
+  var mainWs = !State.ws || State.ws.id === 'main';
+  var cal = s.calendar || {};
 
+  function pane(name, html) {
+    return '<div class="settings-pane" data-pane="' + name + '"' + (tab === name ? '' : ' hidden') + '><div class="chart-grid">' + html + '</div></div>';
+  }
+
+  host.dataset.rendered = '1';
   host.innerHTML =
-    '<div class="chart-grid">' +
+    '<div class="settings-tabs" role="tablist">' + tabs.map(function (t) {
+      return '<button class="pill' + (tab === t[0] ? ' active' : '') + '" data-act="settings-tab" data-value="' + t[0] + '">' + esc(t[1]) + '</button>';
+    }).join('') + '</div>' +
 
-    chartCard('Pipeline stages',
-      '<div id="stageEditor">' + (s.stages || []).map(function (st, i) {
-        return listEditorRow('stage', i, st.name, st.color, st.group);
-      }).join('') + '</div>' +
-      '<button class="btn btn-sm" data-act="add-stage" style="margin-top:8px">' + icon('plus', 12) + ' Add stage</button>' +
-      '<div class="tiny muted" style="margin-top:8px">The arrows change the order everywhere — the board, the filters and the lead form. ' +
-      '"Live" stages sort at the top, "Low priority" sinks, and "Dead" always sits at the very bottom. ' +
-      'Renaming a stage does not move leads; they keep the old name until you move them.</div>') +
+    pane('general',
+      chartCard('You and your brand',
+        '<div class="tiny muted" style="margin-bottom:10px">' + esc(aiName()) + ' signs client messages with this, the message templates fill it in, and emails go out under this name.</div>' +
+        '<div class="field-row">' +
+        '<div class="field"><label>Your name</label><input class="input" id="setBrandPerson" value="' + esc(b.person) + '" placeholder="Nayemuzzaman"/></div>' +
+        '<div class="field"><label>Title</label><input class="input" id="setBrandTitle" value="' + esc(b.title) + '" placeholder="SEO & CRO Strategist"/></div></div>' +
+        '<div class="field-row" style="margin-top:10px">' +
+        '<div class="field"><label>Company</label><input class="input" id="setBrandCompany" value="' + esc(b.company) + '" placeholder="Everstone Digital"/></div>' +
+        '<div class="field"><label>Phone</label><input class="input" id="setBrandPhone" value="' + esc(b.phone) + '"/></div></div>' +
+        '<div class="field" style="margin-top:10px"><label>Signature preview</label><div class="sig-preview">' + esc(signature() || '—') + '</div></div>') +
+      chartCard('Time zone and money',
+        '<div class="field"><label>Time zone of this workspace</label><select class="select" id="setTimezone">' +
+        ['Asia/Dhaka', 'Asia/Kolkata', 'Asia/Dubai', 'Asia/Singapore', 'Europe/London', 'Europe/Berlin', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Australia/Sydney', 'UTC'].map(function (z) {
+          return '<option value="' + z + '"' + ((s.timezone || 'Asia/Dhaka') === z ? ' selected' : '') + '>' + z + '</option>';
+        }).join('') + '</select></div>' +
+        '<div class="field" style="margin-top:10px"><label>Currency symbol</label><input class="input" id="setCurrency" value="' + esc(s.currency || '৳') + '" style="max-width:120px"/></div>' +
+        '<div class="tiny muted" style="margin-top:8px">Meetings, the booking page and reminders use this time zone.</div>') +
+      chartCard('Alerts',
+        toggleHtml('setAlarm', !!s.alarmEnabled, 'Sound an alarm for hot leads that are due', '') +
+        '<button class="btn btn-sm" data-act="ask-notifications">Enable desktop notifications</button>' +
+        '<div class="tiny muted" style="margin-top:10px">Your phone is covered by Telegram, which works whether this tab is open or not. The alarm here only fires while the dashboard is open.</div>') +
+      chartCard('Top strip and ordering',
+        '<div class="field"><label>Leads in the Recent strip</label>' +
+        '<input class="input" type="number" min="1" max="20" id="setRecentLimit" value="' + esc(s.recentLimit || 8) + '"/></div>' +
+        toggleHtml('setShowFlow', s.showFlowStrip !== false, 'Show the interaction counters across the top of Today', '') +
+        '<button class="btn btn-sm" data-act="open-flow-config">Choose what they count</button>')
+    ) +
 
-    chartCard('Priority levels',
-      '<div id="priorityEditor">' + (s.priorities || []).map(function (p, i) {
-        return listEditorRow('priority', i, p.name, p.color);
-      }).join('') + '</div>' +
-      '<button class="btn btn-sm" data-act="add-priority" style="margin-top:8px">' + icon('plus', 12) + ' Add level</button>' +
-      '<div class="tiny muted" style="margin-top:8px">Add as many as you want — Untouched, Nurture, Ready to sign.</div>') +
+    pane('pipeline',
+      chartCard('Pipeline stages',
+        '<div id="stageEditor">' + (s.stages || []).map(function (st, i) {
+          return listEditorRow('stage', i, st.name, st.color, st.group);
+        }).join('') + '</div>' +
+        '<button class="btn btn-sm" data-act="add-stage" style="margin-top:8px">' + icon('plus', 12) + ' Add stage</button>' +
+        '<div class="tiny muted" style="margin-top:8px">The arrows change the order everywhere — the board, the filters and the lead form. ' +
+        '"Live" stages sort at the top, "Low priority" sinks, and "Dead" always sits at the very bottom. ' +
+        'Renaming a stage does not move leads; they keep the old name until you move them.</div>') +
+      chartCard('Priority levels',
+        '<div id="priorityEditor">' + (s.priorities || []).map(function (p, i) {
+          return listEditorRow('priority', i, p.name, p.color);
+        }).join('') + '</div>' +
+        '<button class="btn btn-sm" data-act="add-priority" style="margin-top:8px">' + icon('plus', 12) + ' Add level</button>' +
+        '<div class="tiny muted" style="margin-top:8px">Add as many as you want — Untouched, Nurture, Ready to sign.</div>') +
+      chartCard('Labels',
+        '<div class="field"><label>One per line</label>' +
+        '<textarea class="textarea" id="setLabels" rows="5">' + esc((s.labels || []).join('\n')) + '</textarea></div>' +
+        '<div class="tiny muted" style="margin-top:6px">A lead can carry several labels at once, unlike stage or priority.</div>') +
+      chartCard('Sources and services',
+        '<div class="field"><label>Sources</label><textarea class="textarea" id="setSources" rows="4">' + esc((s.sources || []).join('\n')) + '</textarea></div>' +
+        '<div class="field" style="margin-top:10px"><label>Services</label><textarea class="textarea" id="setServices" rows="4">' + esc((s.services || []).join('\n')) + '</textarea></div>') +
+      chartCard('Loss reasons',
+        '<div class="field"><label>Asked whenever you mark a lead Dead</label>' +
+        '<textarea class="textarea" id="setLostReasons" rows="5">' + esc((s.lostReasons || []).join('\n')) + '</textarea></div>') +
+      chartCard('Follow-up cadence',
+        '<div class="tiny muted" style="margin-bottom:10px">Days after entering a stage. Marking a follow-up done moves you to the next number instead of leaving a blank.</div>' +
+        Object.keys(s.cadence || {}).map(function (k) {
+          return '<div class="field" style="margin-bottom:8px"><label>' + esc(k) + '</label>' +
+            '<input class="input cadence-input" data-stage="' + esc(k) + '" value="' + esc((s.cadence[k] || []).join(', ')) + '"/></div>';
+        }).join('')) +
+      chartCard('When a lead counts as quiet',
+        '<div class="field-row">' +
+        '<div class="field"><label>Going quiet after</label><input class="input" type="number" id="setWarnDays" value="' + esc((s.rotting || {}).warnDays || 14) + '"/></div>' +
+        '<div class="field"><label>Gone cold after</label><input class="input" type="number" id="setStaleDays" value="' + esc((s.rotting || {}).staleDays || 30) + '"/></div>' +
+        '</div><div class="tiny muted" style="margin-top:6px">Counted in days since anything last happened on the lead.</div>') +
+      chartCard('Stage → interaction',
+        '<div class="tiny muted">Which stage counts as which interaction. Moving a lead onto one of these logs it automatically, ' +
+        'so the counters stay right even after the lead has moved on.</div>' +
+        '<div id="touchMapEditor" style="margin-top:10px">' +
+        (s.stages || []).map(function (st) {
+          var current = (s.stageTouchMap || {})[st.name] || '';
+          return '<div class="row" style="flex-wrap:nowrap;margin-bottom:5px">' +
+            '<span class="chip-dot" style="background:' + esc(st.color) + '"></span>' +
+            '<span class="truncate" style="flex:1;font-size:12.5px">' + esc(st.name) + '</span>' +
+            '<select class="select touchmap-input" data-stage="' + esc(st.name) + '" style="width:auto">' +
+            '<option value="">— nothing —</option>' +
+            (s.touchTypes || DEFAULT_SETTINGS.touchTypes).map(function (t) {
+              return '<option value="' + esc(t.key) + '"' + (current === t.key ? ' selected' : '') + '>' + esc(t.label) + '</option>';
+            }).join('') + '</select></div>';
+        }).join('') + '</div>')
+    ) +
 
-    chartCard('Labels',
-      '<div class="field"><label>One per line</label>' +
-      '<textarea class="textarea" id="setLabels" rows="5">' + esc((s.labels || []).join('\n')) + '</textarea></div>' +
-      '<div class="tiny muted" style="margin-top:6px">A lead can carry several labels at once, unlike stage or priority.</div>') +
+    pane('ai',
+      chartCard(aiName() + ' — custom instructions',
+        '<div class="field"><label>Standing orders, always obeyed</label>' +
+        '<textarea class="textarea" id="setAiInstructions" rows="7" placeholder="Example: Always write client messages in English. Never use exclamation marks. When I ask for a summary, keep it under five lines.">' + esc(s.aiInstructions || '') + '</textarea></div>' +
+        '<div class="field" style="margin-top:10px"><label>Default model</label>' +
+        '<select class="select" id="setAiModel">' +
+        '<option value="fast"' + (s.aiModel === 'fast' ? ' selected' : '') + '>Fast — cheap, good for chat</option>' +
+        '<option value="power"' + (s.aiModel === 'power' ? ' selected' : '') + '>Power — slower, better for audits and long writing</option>' +
+        '</select></div>') +
+      chartCard('Which AI is answering',
+        '<div id="aiStatusBox" class="small muted">Checking…</div>' +
+        (isAdminUser() ? '<button class="btn btn-sm" data-act="go-admin" data-value="ai" style="margin-top:10px">Manage AI providers and keys</button>' : '<div class="tiny muted" style="margin-top:8px">Providers and keys are managed by the admin for everyone.</div>'))
+    ) +
 
-    chartCard('Sources and services',
-      '<div class="field"><label>Sources</label><textarea class="textarea" id="setSources" rows="4">' + esc((s.sources || []).join('\n')) + '</textarea></div>' +
-      '<div class="field" style="margin-top:10px"><label>Services</label><textarea class="textarea" id="setServices" rows="4">' + esc((s.services || []).join('\n')) + '</textarea></div>') +
+    pane('telegram', '<div id="tgSettings" class="card" style="grid-column:1/-1"><div class="card-body small muted">Loading…</div></div>') +
+    pane('booking', '<div id="bookingSettings" class="card" style="grid-column:1/-1"><div class="card-body small muted">Loading…</div></div>') +
 
-    chartCard('Loss reasons',
-      '<div class="field"><label>Asked whenever you mark a lead Dead</label>' +
-      '<textarea class="textarea" id="setLostReasons" rows="5">' + esc((s.lostReasons || []).join('\n')) + '</textarea></div>') +
+    pane('calendar',
+      chartCard('Follow-up reminders in Google Calendar',
+        (mainWs
+          ? '<div class="radio-list">' +
+            [['free', 'All-day reminder marked “free”', 'Shows in your calendar but never blocks a booking page. Recommended.'],
+             ['calendar', 'On a separate “Everstone Follow-ups” calendar', 'Keeps them out of your main calendar entirely. Also free.'],
+             ['off', 'Do not add follow-ups to the calendar', 'Telegram and the dashboard still remind you.']].map(function (o) {
+              return '<label class="radio-row"><input type="radio" name="setFollowCal" value="' + o[0] + '"' + ((cal.followups || 'free') === o[0] ? ' checked' : '') + '/>' +
+                '<span><b>' + esc(o[1]) + '</b><br/><span class="tiny muted">' + esc(o[2]) + '</span></span></label>';
+            }).join('') + '</div>'
+          : '<div class="small muted">This workspace does not write to Google Calendar — meetings get an “Add to Google Calendar” button instead, so they land in your own calendar.</div>')) +
+      chartCard('Meetings',
+        (mainWs
+          ? toggleHtml('setMeetCal', cal.meetings !== false, 'Put meetings in Google Calendar', 'At their exact time, with a 30-minute reminder.')
+          : '<div class="small muted">Use the Calendar button on any meeting.</div>') +
+        '<div class="tiny muted" style="margin-top:8px">A cancelled or no-show meeting frees its slot again.</div>') +
+      (mainWs ? chartCard('Booking link closing whole days?',
+        '<div class="small" style="line-height:1.6">Older versions put every follow-up into your calendar as a <b>busy</b> all-day event, so booking pages treated the whole day as taken. ' +
+        'This button marks every one of them <b>free</b>.</div>' +
+        '<button class="btn btn-sm btn-primary" data-act="calendar-repair" style="margin-top:10px">Free up my booking days</button>' +
+        '<div class="tiny muted" style="margin-top:8px">If a day is still closed afterwards, check your booking tool\'s “maximum bookings per day” setting.</div>') : '')
+    ) +
 
-    chartCard('Follow-up cadence',
-      '<div class="tiny muted" style="margin-bottom:10px">Days after entering a stage. Marking a follow-up done moves you to the next number instead of leaving a blank.</div>' +
-      Object.keys(s.cadence || {}).map(function (k) {
-        return '<div class="field" style="margin-bottom:8px"><label>' + esc(k) + '</label>' +
-          '<input class="input cadence-input" data-stage="' + esc(k) + '" value="' + esc((s.cadence[k] || []).join(', ')) + '"/></div>';
-      }).join('')) +
+    pane('api', '<div id="apiSettings" class="card" style="grid-column:1/-1"><div class="card-body small muted">Loading…</div></div>') +
 
-    chartCard('When a lead counts as quiet',
-      '<div class="field-row">' +
-      '<div class="field"><label>Going quiet after</label><input class="input" type="number" id="setWarnDays" value="' + esc((s.rotting || {}).warnDays || 14) + '"/></div>' +
-      '<div class="field"><label>Gone cold after</label><input class="input" type="number" id="setStaleDays" value="' + esc((s.rotting || {}).staleDays || 30) + '"/></div>' +
-      '</div><div class="tiny muted" style="margin-top:6px">Counted in days since anything last happened on the lead.</div>') +
+    pane('data',
+      (manager ? chartCard('Data safety',
+        '<div class="tiny muted" style="margin-bottom:10px">The sheet is the record. These check it and take copies of it.</div>' +
+        '<div class="row">' +
+        '<button class="btn btn-sm" data-act="verify-data">Check everything is healthy</button>' +
+        '<button class="btn btn-sm" data-act="recount-data">Recount interactions</button>' +
+        '<button class="btn btn-sm" data-act="find-dupes">Find duplicates</button>' +
+        '<button class="btn btn-sm" data-act="backup-now">Back up now</button>' +
+        '</div>' +
+        '<div class="tiny muted" style="margin-top:10px">Columns are matched by name, never by position, and a version upgrade copies ' +
+        'the whole spreadsheet before it adds anything. Old columns are never moved or removed.</div>') : '') +
+      chartCard('Your account',
+        '<div id="accountBox" class="small muted">Loading…</div>') +
+      chartCard('Connection',
+        '<div class="field"><label>Apps Script web app URL</label><input class="input" id="setUrl" value="' + esc(Cfg.url) + '"/></div>' +
+        '<div class="field" style="margin-top:10px"><label>Google client ID (optional)</label><input class="input" id="setClientId" value="' + esc(Cfg.clientId) + '"/></div>' +
+        '<div class="row" style="margin-top:12px">' +
+        '<button class="btn btn-sm" data-act="test-connection">Test connection</button></div>' +
+        '<div class="tiny muted" style="margin-top:10px">Signed in as ' + esc((State.me && State.me.email) || Cfg.who || 'password') + '. Unsent changes: ' + Outbox.items.length + '.</div>')
+    );
 
-    chartCard('Evo — custom instructions',
-      '<div class="field"><label>Standing orders, always obeyed</label>' +
-      '<textarea class="textarea" id="setAiInstructions" rows="7" placeholder="Example: Always write client messages in English. Never use exclamation marks. Sign off as Nayem. When I ask for a summary, keep it under five lines.">' + esc(s.aiInstructions || '') + '</textarea></div>' +
-      '<div class="field" style="margin-top:10px"><label>Default model</label>' +
-      '<select class="select" id="setAiModel">' +
-      '<option value="fast"' + (s.aiModel === 'fast' ? ' selected' : '') + '>Fast — cheap, good for chat</option>' +
-      '<option value="power"' + (s.aiModel === 'power' ? ' selected' : '') + '>Power — slower, better for audits and long writing</option>' +
-      '</select></div>') +
-
-    chartCard('Alerts',
-      '<label class="row" style="cursor:pointer;margin-bottom:10px"><input type="checkbox" id="setAlarm"' + (s.alarmEnabled ? ' checked' : '') + '/> <span>Sound an alarm for hot leads that are due</span></label>' +
-      '<button class="btn btn-sm" data-act="ask-notifications">Enable desktop notifications</button>' +
-      '<div class="tiny muted" style="margin-top:10px">Your phone is covered by Telegram, which works whether this tab is open or not. The alarm here only fires while the dashboard is open.</div>') +
-
-    chartCard('Top strip and ordering',
-      '<div class="field"><label>Leads in the Recent strip</label>' +
-      '<input class="input" type="number" min="1" max="20" id="setRecentLimit" value="' + esc(s.recentLimit || 8) + '"/></div>' +
-      '<label class="row" style="cursor:pointer;margin:12px 0"><input type="checkbox" id="setShowFlow"' +
-      (s.showFlowStrip !== false ? ' checked' : '') + '/> <span>Show the interaction counters across the top of Today</span></label>' +
-      '<button class="btn btn-sm" data-act="open-flow-config">Choose what they count</button>' +
-      '<hr class="divider"/>' +
-      '<div class="tiny muted">Which stage counts as which interaction. Moving a lead onto one of these logs it automatically, ' +
-      'so the counters stay right even after the lead has moved on.</div>' +
-      '<div id="touchMapEditor" style="margin-top:10px">' +
-      (s.stages || []).map(function (st) {
-        var current = (s.stageTouchMap || {})[st.name] || '';
-        return '<div class="row" style="flex-wrap:nowrap;margin-bottom:5px">' +
-          '<span class="chip-dot" style="background:' + esc(st.color) + '"></span>' +
-          '<span class="truncate" style="flex:1;font-size:12.5px">' + esc(st.name) + '</span>' +
-          '<select class="select touchmap-input" data-stage="' + esc(st.name) + '" style="width:auto">' +
-          '<option value="">— nothing —</option>' +
-          (s.touchTypes || DEFAULT_SETTINGS.touchTypes).map(function (t) {
-            return '<option value="' + esc(t.key) + '"' + (current === t.key ? ' selected' : '') + '>' + esc(t.label) + '</option>';
-          }).join('') + '</select></div>';
-      }).join('') + '</div>') +
-
-    chartCard('Data safety',
-      '<div class="tiny muted" style="margin-bottom:10px">The sheet is the record. These check it and take copies of it.</div>' +
-      '<div class="row">' +
-      '<button class="btn btn-sm" data-act="verify-data">Check everything is healthy</button>' +
-      '<button class="btn btn-sm" data-act="recount-data">Recount interactions</button>' +
-      '<button class="btn btn-sm" data-act="find-dupes">Find duplicates</button>' +
-      '</div>' +
-      '<div class="tiny muted" style="margin-top:10px">Columns are matched by name, never by position, and a version upgrade copies ' +
-      'the whole spreadsheet before it adds anything. Old columns are never moved or removed.</div>') +
-
-    chartCard('Connection',
-      '<div class="field"><label>Apps Script web app URL</label><input class="input" id="setUrl" value="' + esc(Cfg.url) + '"/></div>' +
-      '<div class="field" style="margin-top:10px"><label>Google client ID (optional)</label><input class="input" id="setClientId" value="' + esc(Cfg.clientId) + '"/></div>' +
-      '<div class="row" style="margin-top:12px">' +
-      '<button class="btn btn-sm" data-act="test-connection">Test connection</button>' +
-      '<button class="btn btn-sm btn-danger" data-act="logout">Sign out</button></div>' +
-      '<div class="tiny muted" style="margin-top:10px">Signed in as ' + esc(Cfg.who || 'password') + '. Unsent changes: ' + Outbox.items.length + '.</div>') +
-
-    '</div>';
+  if (typeof settingsTabOpened === 'function') settingsTabOpened(tab);
 }
 
 /**
@@ -1128,6 +1322,8 @@ function closeDetail() {
   State.ui.detailId = null;
   $('#drawer').classList.remove('show');
   $('#scrim').classList.remove('show');
+  // back to the pop-up list the lead was opened from, if there was one
+  if (typeof afterDetailClosed === 'function') afterDetailClosed();
 }
 
 function renderDrawer() {
@@ -1219,7 +1415,12 @@ function renderDrawerOverview(l) {
       '</dl></div>' +
 
     '<div class="section"><div class="section-title">Deal</div><dl class="kv">' +
-      editableField(l, 'value', 'Value', { type: 'number', display: function (v) { return v ? esc(Fmt.money(v)) : ''; } }) +
+      (canSeeMoney() ? editableField(l, 'value', 'Value', { type: 'number', display: function (v) { return v ? esc(Fmt.money(v)) : ''; } }) : '') +
+      ((State.members || []).length > 1 || l.owner
+        ? '<dt>Assigned to</dt><dd>' + (canManageWs()
+            ? '<div class="editable" data-act="assign-lead" data-id="' + esc(l.id) + '" tabindex="0">' + (l.owner ? esc(memberName(l.owner)) : '<span class="muted">Nobody — assign</span>') + '</div>'
+            : '<span class="small">' + esc(l.owner ? memberName(l.owner) : '—') + '</span>') + '</dd>'
+        : '') +
       editableField(l, 'service', 'Service', { type: 'select', display: function (v) { return esc(v); } }) +
       editableField(l, 'source', 'Source', { type: 'select', display: function (v) { return esc(v); } }) +
       editableField(l, 'priority', 'Priority', { type: 'select', display: function (v) { return priorityChip(v); } }) +
@@ -1231,7 +1432,7 @@ function renderDrawerOverview(l) {
       '</dl></div>' +
 
     '<div class="section"><div class="section-title">Notes' +
-      '<span class="tiny muted">Bangla is fine — Evo reads it</span></div>' +
+      '<span class="tiny muted">Bangla is fine — the AI reads it</span></div>' +
       '<div class="editable" data-act="edit-field" data-id="' + esc(l.id) + '" data-field="notes" data-type="textarea" data-label="Notes" tabindex="0" style="min-height:60px;align-items:flex-start;white-space:pre-wrap">' +
       (l.notes ? esc(l.notes) : '<span class="muted">Click to write a note</span>') + '</div>' +
       '<div class="row" style="margin-top:10px">' +
@@ -1245,6 +1446,8 @@ function renderDrawerOverview(l) {
       '<button class="btn btn-sm" data-act="add-meeting-for" data-id="' + esc(l.id) + '">' + icon('meetings', 13) + ' Schedule meeting</button>' +
       '<button class="btn btn-sm" data-act="compose-email" data-id="' + esc(l.id) + '">' + icon('mail', 13) + ' Write email</button>' +
       '<button class="btn btn-sm" data-act="run-audit" data-id="' + esc(l.id) + '">' + icon('search', 13) + ' Audit site</button>' +
+      '<button class="btn btn-sm" data-act="proposal-draft" data-id="' + esc(l.id) + '">' + icon('docs', 13) + ' Proposal</button>' +
+      '<button class="btn btn-sm" data-act="lead-summary" data-id="' + esc(l.id) + '">' + icon('ai', 13) + ' Where it stands</button>' +
       '<button class="btn btn-sm btn-danger" data-act="archive-lead" data-id="' + esc(l.id) + '">' + icon('trash', 13) + ' Archive</button>' +
       '</div></div>';
 }
@@ -1266,14 +1469,30 @@ function renderDrawerActivity(l) {
       var dotClass = a.type === 'created' ? 'created' : a.type === 'deleted' ? 'deleted' : a.actor === 'evo' ? 'evo' : a.field === 'stage' ? 'stage' : '';
       var text;
       if (a.type === 'created') text = '<b>Added</b> to the pipeline';
+      else if (a.type === 'followup_done') text = '<b>Followed up</b>' + (a.newValue ? ' — next ' + esc(Fmt.value(a.newValue, 'followup')) : '');
       else if (a.type === 'deleted') text = '<b>Archived</b>' + (a.details ? ' — ' + esc(a.details) : '');
-      else if (a.field) text = '<b>' + esc(fieldLabel(a.field)) + '</b> ' + esc(a.oldValue || 'empty') + ' → ' + esc(a.newValue || 'empty');
+      else if (a.field) text = '<b>' + esc(fieldLabel(a.field)) + '</b> ' + esc(Fmt.value(a.oldValue, a.field) || 'empty') + ' → ' + esc(Fmt.value(a.newValue, a.field) || 'empty');
       else text = esc(a.type || 'Changed');
       return '<div class="hist-item"><span class="hist-dot ' + dotClass + '"></span>' +
-        '<span class="hist-text">' + text + (a.actor === 'evo' ? ' <span class="chip chip-ghost">Evo</span>' : '') + '</span>' +
-        '<span class="hist-when" title="' + esc(a.at) + '">' + esc(Fmt.ago(a.at)) + '</span></div>';
+        '<span class="hist-text">' + text + actorChip(a.actor) + '</span>' +
+        '<span class="hist-when" title="' + esc(Fmt.value(a.at)) + '">' + esc(Fmt.ago(a.at)) + '</span></div>';
     }).join('') + '</div>' : '<div class="muted small">No recorded changes yet. New edits will appear here.</div>') +
     '</div>';
+}
+
+/** Who made a change, when it was not you. */
+function actorChip(actor) {
+  var a = String(actor || '');
+  if (!a || a === 'app' || a === 'system') return '';
+  var me = (State.me && State.me.email) || Cfg.who || '';
+  if (a === me) return '';
+  if (a === 'evo') return ' <span class="chip chip-ghost">AI</span>';
+  if (a === 'undo') return ' <span class="chip chip-ghost">undo</span>';
+  if (a === 'booking') return ' <span class="chip chip-info">booking page</span>';
+  if (a.indexOf('api:') === 0) return ' <span class="chip chip-ghost" title="' + esc(a) + '">API · ' + esc(a.slice(4)) + '</span>';
+  if (a.indexOf('tg:') === 0) return ' <span class="chip chip-ghost" title="' + esc(a.slice(3)) + ' via Telegram">' + esc(a.slice(3).split('@')[0]) + ' · Telegram</span>';
+  if (a.indexOf('@') > 0) return ' <span class="chip chip-ghost" title="' + esc(a) + '">' + esc(a.split('@')[0]) + '</span>';
+  return ' <span class="chip chip-ghost">' + esc(a) + '</span>';
 }
 
 function fieldLabel(f) {
@@ -1282,7 +1501,8 @@ function fieldLabel(f) {
     contact: 'Contact', source: 'Source', stage: 'Stage', priority: 'Priority',
     followup: 'Follow-up', nextStep: 'Next step', notes: 'Notes', service: 'Service',
     value: 'Value', proposalSentAt: 'Proposal date', proposalValue: 'Proposal value',
-    lostReason: 'Loss reason', star: 'Star', status: 'Status'
+    lostReason: 'Loss reason', star: 'Star', status: 'Status', labels: 'Labels', owner: 'Owner',
+    history: 'Notes log', createdOn: 'Date added'
   };
   return map[f] || f;
 }
@@ -1342,7 +1562,8 @@ function switchPage(page) {
   $$('.page').forEach(function (p) { p.classList.toggle('active', p.id === 'page-' + page); });
   $$('.nav-item').forEach(function (b) { b.classList.toggle('active', b.dataset.page === page); });
   renderActivePage();
-  try { history.replaceState(null, '', '#' + page); } catch (e) {}
+  // (The demo runs inside a host page that reserves some #names, so it leaves the address alone.)
+  if (!window.EV_DEMO) { try { history.replaceState(null, '', '#' + page); } catch (e) {} }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1711,7 +1932,7 @@ function renderReminderList() {
 
 /* ─── HISTORY ─────────────────────────────────────────────────────────────── */
 var HISTORY_ICONS = {
-  created: 'plus', deleted: 'trash', restored: 'undo', updated: 'edit',
+  created: 'plus', deleted: 'trash', restored: 'undo', updated: 'edit', followup_done: 'check',
   merged: 'merge', merge: 'merge', touch: 'phone', undo: 'undo',
   meeting_created: 'meetings', meeting_updated: 'meetings', meeting_deleted: 'meetings',
   doc_added: 'docs', email_sent: 'mail', audit: 'search', settings: 'settings',
@@ -1736,6 +1957,7 @@ function historyHeadline(a) {
 
   switch (a.type) {
     case 'created':        return who + ' was added to the pipeline';
+    case 'followup_done':  return 'Followed up with ' + who + (a.newValue ? ' · next ' + esc(Fmt.value(a.newValue, 'followup')) : '');
     case 'deleted':        return who + ' was archived';
     case 'restored':       return who + ' was restored';
     case 'merged':         return who + ' was folded into another lead';
@@ -1770,19 +1992,18 @@ function historyRow(a) {
   var showDiff = a.field && (a.oldValue || a.newValue) && a.type !== 'created';
 
   return '<div class="hist-row' + (a.undone ? ' undone' : '') + '">' +
-    '<span class="hist-time">' + esc(String(a.at || '').slice(11, 16)) + '</span>' +
+    '<span class="hist-time">' + esc(Fmt.clock(a.at)) + '</span>' +
     '<span class="hist-icon ' + historyIconClass(a) + '">' + icon(HISTORY_ICONS[a.type] || 'edit', 11) + '</span>' +
     '<div class="hist-body">' +
       '<div class="hist-head">' + historyHeadline(a) +
-        (a.actor === 'evo' ? '<span class="chip chip-ghost">Evo</span>' : '') +
-        (a.actor === 'undo' ? '<span class="chip chip-ghost">undo</span>' : '') +
+        actorChip(a.actor) +
         (a.undone ? '<span class="chip chip-ghost">reverted</span>' : '') +
       '</div>' +
       (showDiff
         ? '<div class="hist-diff">' +
-            (a.oldValue ? '<span class="hist-old" title="' + esc(a.oldValue) + '">' + esc(truncateText(a.oldValue, 70)) + '</span>' : '<span class="tiny muted">was empty</span>') +
+            (a.oldValue ? '<span class="hist-old" title="' + esc(a.oldValue) + '">' + esc(truncateText(Fmt.value(a.oldValue, a.field), 70)) + '</span>' : '<span class="tiny muted">was empty</span>') +
             '<span class="tiny muted">→</span>' +
-            (a.newValue ? '<span class="hist-new" title="' + esc(a.newValue) + '">' + esc(truncateText(a.newValue, 70)) + '</span>' : '<span class="tiny muted">cleared</span>') +
+            (a.newValue ? '<span class="hist-new" title="' + esc(a.newValue) + '">' + esc(truncateText(Fmt.value(a.newValue, a.field), 70)) + '</span>' : '<span class="tiny muted">cleared</span>') +
           '</div>'
         : (a.details ? '<div class="tiny muted" style="margin-top:2px">' + esc(a.details) + '</div>' : '')) +
     '</div>' +
@@ -1843,7 +2064,7 @@ function renderHistory() {
 
   var groups = {};
   rows.forEach(function (a) {
-    var day = String(a.at || '').slice(0, 10) || 'unknown';
+    var day = Fmt.localDay(a.at) || 'unknown';
     (groups[day] = groups[day] || []).push(a);
   });
 
@@ -1860,7 +2081,7 @@ function renderHistory() {
 
 function historyTypeLabel(t) {
   var map = {
-    updated: 'Edits', created: 'Added', deleted: 'Archived', restored: 'Restored',
+    updated: 'Edits', created: 'Added', deleted: 'Archived', restored: 'Restored', followup_done: 'Follow-ups done',
     touch: 'Interactions', merge: 'Merges', merged: 'Merged away', undo: 'Undone',
     meeting_created: 'Meetings booked', meeting_updated: 'Meetings edited',
     meeting_deleted: 'Meetings deleted', doc_added: 'Documents', email_sent: 'Emails',
@@ -1913,12 +2134,13 @@ function renderDrawerTimeline(l) {
     items.push({
       at: e.at, color: stageMeta(e.toStage).color,
       title: 'Stage ' + (e.fromStage ? e.fromStage + ' → ' : '') + e.toStage,
-      meta: e.actor === 'evo' ? 'by Evo' : ''
+      meta: e.actor === 'evo' ? 'by ' + aiName() : ''
     });
   });
   meetings.forEach(function (m) {
     items.push({
       at: (m.date || '') + 'T' + (m.time || '00:00') + ':00',
+      local: true,
       color: '#0891B2',
       title: (m.status === 'done' ? 'Met — ' : 'Meeting — ') + (m.title || 'Meeting'),
       meta: [m.decision, m.nextStep].filter(Boolean).join(' · ')
@@ -1957,8 +2179,9 @@ function renderDrawerTimeline(l) {
               (i < items.length - 1 ? '<span class="tline-line"></span>' : '') + '</div>' +
               '<div class="tline-body">' +
                 '<div class="tline-title">' + esc(it.title) + '</div>' +
-                '<div class="tline-meta">' + esc(Fmt.date(String(it.at).slice(0, 10))) +
-                (String(it.at).slice(11, 16) !== '00:00' && String(it.at).length > 10 ? ' · ' + esc(String(it.at).slice(11, 16)) : '') +
+                '<div class="tline-meta">' + esc(it.local ? Fmt.date(String(it.at).slice(0, 10)) : Fmt.date(Fmt.localDay(it.at))) +
+                (it.local ? (String(it.at).slice(11, 16) !== '00:00' ? ' · ' + esc(Fmt.time(String(it.at).slice(11, 16))) : '')
+                          : (String(it.at).length > 10 ? ' · ' + esc(Fmt.time(Fmt.clock(it.at))) : '')) +
                 (it.meta ? ' · ' + esc(it.meta) : '') + '</div>' +
               '</div></div>';
           }).join('') + '</div>'

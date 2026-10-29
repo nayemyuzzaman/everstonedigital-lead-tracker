@@ -52,12 +52,12 @@ function openLeadForm(id) {
     wa: lead.wa, email: lead.email, source: lead.source, stage: lead.stage,
     priority: lead.priority, service: lead.service, value: lead.value,
     followup: lead.followup, nextStep: lead.nextStep, notes: lead.notes,
-    labels: (lead.labels || []).join(', ')
+    labels: (lead.labels || []).join(', '), createdOn: Dates.ymdOf(lead.createdAt) || Dates.today()
   } : {
     name: '', contact: '', site: '', phone: '', wa: '', email: '',
     source: (s.sources || [])[0] || 'Ads',
     stage: ((s.stages || [])[0] || {}).name || 'New',
-    priority: 'warm', service: '', value: '', followup: '', nextStep: '', notes: '', labels: ''
+    priority: 'warm', service: '', value: '', followup: '', nextStep: '', notes: '', labels: '', createdOn: Dates.today()
   };
 
   var restored = false;
@@ -97,8 +97,12 @@ function openLeadForm(id) {
         '<div class="field"><label>Follow-up date</label><input class="input lf" data-k="followup" type="date" value="' + esc(d.followup) + '"/></div>' +
       '</div>' +
       '<div class="field"><label>Next step</label><input class="input lf" data-k="nextStep" value="' + esc(d.nextStep) + '" placeholder="What exactly happens next?"/></div>' +
-      '<div class="field"><label>Labels (comma separated)</label><input class="input lf" data-k="labels" value="' + esc(d.labels) + '" placeholder="Retainer, Big Fish"/></div>' +
-      '<div class="field"><label>Notes</label><textarea class="textarea lf" data-k="notes" rows="4" placeholder="Bangla is fine — Evo reads it">' + esc(d.notes) + '</textarea></div>',
+      '<div class="field-row">' +
+        '<div class="field"><label>Labels (comma separated)</label><input class="input lf" data-k="labels" value="' + esc(d.labels) + '" placeholder="Retainer, Big Fish"/></div>' +
+        '<div class="field"><label>Date added</label><input class="input lf" data-k="createdOn" type="date" max="' + esc(Dates.today()) + '" value="' + esc(d.createdOn || Dates.today()) + '"/>' +
+        '<div class="tiny muted">The day the lead came in — reports count it on this day.</div></div>' +
+      '</div>' +
+      '<div class="field"><label>Notes</label><textarea class="textarea lf" data-k="notes" rows="4" placeholder="Bangla is fine — the AI reads it">' + esc(d.notes) + '</textarea></div>',
     foot:
       '<span class="spread tiny muted" id="lfDraftNote"></span>' +
       '<button class="btn" data-act="close-modal">Cancel</button>' +
@@ -149,6 +153,15 @@ function saveLeadFromForm(id, draftKey) {
     labels: f.labels.split(',').map(function (x) { return x.trim(); }).filter(Boolean)
   };
   if (id) patch.id = id;
+  // "Date added": only sent when it differs, so ordinary edits never touch it.
+  var wasOn = id ? Dates.ymdOf((getLead(id) || {}).createdAt) : Dates.today();
+  var on = /^\d{4}-\d{2}-\d{2}$/.test(f.createdOn || '') ? (f.createdOn > Dates.today() ? Dates.today() : f.createdOn) : '';
+  if (on && on !== wasOn) {
+    patch.createdOn = on;
+    var t = new Date();
+    var at = new Date(on + 'T' + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') + ':00');
+    if (!isNaN(at)) patch.createdAt = at.toISOString();
+  }
 
   var lead = Ops.saveLead(patch, { label: id ? 'edit on ' + patch.name : 'new lead' });
   Drafts.clear(draftKey);
@@ -173,8 +186,12 @@ function openMeetingForm(meetingId, presetLeadId) {
       '<div class="field-row-3">' +
         '<div class="field"><label>Date</label><input class="input mf" data-k="date" type="date" value="' + esc(m ? m.date : Dates.today()) + '"/></div>' +
         '<div class="field"><label>Time</label><input class="input mf" data-k="time" type="time" value="' + esc(m ? m.time : '11:00') + '"/></div>' +
-        '<div class="field"><label>Minutes</label><input class="input mf" data-k="duration" type="number" value="' + esc(m ? m.duration : 45) + '"/></div>' +
+        '<div class="field"><label>Minutes</label><input class="input mf" data-k="duration" type="number" min="5" step="5" value="' + esc(m ? m.duration : 45) + '"/></div>' +
       '</div>' +
+      '<div class="dur-picks">' + [30, 45, 60, 90].map(function (d) {
+        return '<button type="button" class="pill' + (Number(m ? m.duration : 45) === d ? ' active' : '') + '" data-act="mf-dur" data-value="' + d + '">' + (d === 60 ? '1 hour' : d === 90 ? '1½ hours' : d + ' min') + '</button>';
+      }).join('') + '</div>' +
+      '<div class="clash-box" id="mfClash" hidden></div>' +
       '<div class="field-row">' +
         '<div class="field"><label>Where</label><select class="select mf" data-k="platform">' +
         ['google', 'zoom', 'phone', 'whatsapp', 'in person'].map(function (p) {
@@ -183,9 +200,51 @@ function openMeetingForm(meetingId, presetLeadId) {
         '<div class="field"><label>Link or address</label><input class="input mf" data-k="location" value="' + esc(m ? m.location : '') + '"/></div>' +
       '</div>' +
       '<div class="field"><label>Agenda</label><textarea class="textarea mf" data-k="agenda" rows="3" placeholder="What you want to walk out with">' + esc(m ? m.agenda : '') + '</textarea></div>' +
-      '<div class="tiny muted">This books a Google Calendar event with a 30-minute reminder.</div>',
+      '<div class="tiny muted">' + (meetingInCalendar() ? 'Checked against your Google Calendar as you type. The calendar event follows any change of time or length.' : 'Checked against the other meetings in this account as you type.') + '</div>',
     foot: '<button class="btn" data-act="close-modal">Cancel</button>' +
-      '<button class="btn btn-primary" data-act="save-meeting" data-id="' + esc(meetingId || '') + '">' + (m ? 'Save' : 'Schedule') + '</button>'
+      '<button class="btn btn-primary" data-act="save-meeting" data-id="' + esc(meetingId || '') + '">' + (m ? 'Save' : 'Schedule') + '</button>',
+    data: { meetingId: meetingId || '' }
+  });
+  var recheck = debounce(function () { checkMeetingClash(meetingId || ''); }, 350);
+  $$('#modalBody .mf[data-k="date"], #modalBody .mf[data-k="time"], #modalBody .mf[data-k="duration"]').forEach(function (el) {
+    el.addEventListener('input', function () { Modal.data.clashOk = false; recheck(); });
+    el.addEventListener('change', function () { Modal.data.clashOk = false; recheck(); });
+  });
+  checkMeetingClash(meetingId || '');
+}
+
+/** Asks the server what this time would overlap — tracker meetings and, for
+ *  the main account, busy events in Google Calendar. */
+function checkMeetingClash(id) {
+  var f = {};
+  $$('#modalBody .mf').forEach(function (el) { f[el.dataset.k] = el.value; });
+  if (!f.date || !f.time) return Promise.resolve(null);
+  var stamp = f.date + ' ' + f.time + ' ' + f.duration;
+  Modal.data.clashStamp = stamp;
+  var box = $('#mfClash');
+  return api('meetingConflicts', { id: id, date: f.date, time: f.time, duration: Number(f.duration) || 45 }, { timeout: 30000 }).then(function (r) {
+    if (Modal.data.clashStamp !== stamp || !$('#mfClash')) return null;
+    box = $('#mfClash');
+    var sb = $('#modalFoot [data-act="save-meeting"]');
+    if (sb && !Modal.data.clashOk) { sb.textContent = Modal.data.meetingId ? 'Save' : 'Schedule'; sb.classList.add('btn-primary'); sb.classList.remove('btn-danger'); }
+    if (!r || !r.success) { box.hidden = true; Modal.data.clash = null; return null; }
+    Modal.data.clash = r;
+    box.hidden = false;
+    if (!r.conflicts.length) {
+      box.className = 'clash-box ok';
+      box.innerHTML = icon('check', 12) + ' Free — nothing else at ' + esc(Fmt.time(f.time)) + ' for ' + esc(f.duration || 45) + ' minutes.';
+      return r;
+    }
+    box.className = 'clash-box warn';
+    box.innerHTML = '<b>' + icon('alert', 13) + ' This overlaps</b>' +
+      r.conflicts.map(function (c) {
+        return '<div class="clash-item"><span class="clash-time">' + esc(c.start) + '–' + esc(c.end) + '</span> ' + esc(c.title) +
+          ' <span class="chip ' + (c.source === 'calendar' ? 'chip-info' : 'chip-ghost') + '">' + (c.source === 'calendar' ? 'Google Calendar' : 'this tracker') + '</span></div>';
+      }).join('') +
+      '<div class="row" style="margin-top:8px">' +
+      (r.next ? '<button type="button" class="btn btn-sm btn-primary" data-act="mf-use-time" data-value="' + esc(r.next) + '">Move to ' + esc(Fmt.time(r.next)) + '</button>' : '') +
+      '<span class="tiny muted">' + (r.next ? 'the next free slot that day' : 'No free slot of that length later that day.') + '</span></div>';
+    return r;
   });
 }
 
@@ -193,6 +252,18 @@ function saveMeetingFromForm(id) {
   var f = {};
   $$('#modalBody .mf').forEach(function (el) { f[el.dataset.k] = el.value; });
   if (!f.title && !f.leadId) { toast('Give the meeting a title or pick a lead', 'warn'); return; }
+  // A clash is never saved by accident: the first press shows it, a second
+  // press on "Save anyway" keeps the time on purpose.
+  var clash = Modal.data.clash;
+  var stamp = f.date + ' ' + f.time + ' ' + f.duration;
+  if (clash && clash.conflicts && clash.conflicts.length && Modal.data.clashStamp === stamp && !Modal.data.clashOk) {
+    Modal.data.clashOk = true;
+    var box = $('#mfClash');
+    if (box) { box.classList.add('shake'); box.scrollIntoView({ block: 'nearest' }); setTimeout(function () { box.classList.remove('shake'); }, 500); }
+    var btn = $('#modalFoot [data-act="save-meeting"]');
+    if (btn) { btn.textContent = 'Save anyway'; btn.classList.add('btn-danger'); btn.classList.remove('btn-primary'); }
+    return;
+  }
 
   var patch = {
     leadId: f.leadId, title: f.title || 'Meeting', date: f.date, time: f.time,
@@ -399,7 +470,8 @@ function openWhatsapp(id) {
   if (digits.length === 11 && digits.charAt(0) === '0') digits = '88' + digits;
   if (digits.length === 10) digits = '880' + digits;
 
-  var greeting = 'Hello' + (l.contact ? ' ' + l.contact : '') + ', this is Nayemuzzaman from Everstone Digital.';
+  var b = brand();
+  var greeting = 'Hello' + (l.contact ? ' ' + l.contact : '') + ', this is ' + (b.person || 'me') + (b.company ? ' from ' + b.company : '') + '.';
 
   openModal({
     title: 'WhatsApp ' + (l.name || ''),
@@ -569,7 +641,7 @@ function renderCmdk(query) {
     { label: 'New note', kind: 'action', run: function () { switchPage('notes'); openNoteEditor(null); } },
     { label: 'New task', kind: 'action', run: function () { switchPage('notes'); openTaskEditor(null); } },
     { label: 'Find duplicate leads', kind: 'action', run: function () { openDuplicates(); } },
-    { label: 'Ask Evo', kind: 'page', run: function () { switchPage('ai'); } },
+    { label: 'Ask ' + aiName(), kind: 'page', run: function () { switchPage('ai'); } },
     { label: 'Settings', kind: 'page', run: function () { switchPage('settings'); } },
     { label: 'Sync now', kind: 'action', run: function () { pullFromServer(); } },
     { label: 'Export CSV', kind: 'action', run: function () { switchPage('leads'); exportCsv(); } },
@@ -663,7 +735,7 @@ function collectSettings() {
     }).filter(function (n) { return !isNaN(n) && n > 0; });
   });
 
-  return {
+  var out = {
     stages: stages.length ? stages : State.settings.stages,
     priorities: priorities.length ? priorities : State.settings.priorities,
     labels: lines('#setLabels'),
@@ -682,6 +754,22 @@ function collectSettings() {
     showFlowStrip: $('#setShowFlow') ? !!$('#setShowFlow').checked : true,
     stageTouchMap: Object.keys(touchMap).length ? touchMap : State.settings.stageTouchMap
   };
+  // v7 — only what is on screen is sent, so nothing is reset by accident.
+  if ($('#setBrandPerson')) {
+    out.brand = Object.assign({}, State.settings.brand || {}, {
+      person: $('#setBrandPerson').value.trim(), title: ($('#setBrandTitle') || {}).value || '',
+      company: ($('#setBrandCompany') || {}).value || '', phone: ($('#setBrandPhone') || {}).value || ''
+    });
+  }
+  if ($('#setTimezone')) out.timezone = $('#setTimezone').value;
+  if ($('#setCurrency')) out.currency = $('#setCurrency').value.trim() || '৳';
+  var fc = $('input[name="setFollowCal"]:checked');
+  if (fc || $('#setMeetCal')) {
+    out.calendar = Object.assign({}, State.settings.calendar || {});
+    if (fc) out.calendar.followups = fc.value;
+    if ($('#setMeetCal')) out.calendar.meetings = !!$('#setMeetCal').checked;
+  }
+  return out;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -902,6 +990,7 @@ var ACTIONS = {
   'meet-filter': function (el) { State.ui.meetFilter = el.dataset.value; renderMeetings(); },
   'archive-filter': function (el) { State.ui.archiveFilter = el.dataset.value; renderArchive(); },
   'stat': function (el) {
+    if (el.dataset.kind === 'admin') { ACTIONS['admin-tab'](el); return; }
     if (el.dataset.kind === 'page') switchPage(el.dataset.value);
     else {
       State.ui.filters.health = el.dataset.value;
@@ -924,6 +1013,17 @@ var ACTIONS = {
     if (m) Ops.saveMeeting({ id: m.id, star: !m.star }, { label: 'star meeting' });
   },
   'save-meeting': function (el) { saveMeetingFromForm(el.dataset.id); },
+  'mf-dur': function (el) {
+    var d = $('#modalBody .mf[data-k="duration"]');
+    if (d) { d.value = el.dataset.value; d.dispatchEvent(new Event('change')); }
+    $$('#modalBody .dur-picks .pill').forEach(function (b) { b.classList.toggle('active', b === el); });
+  },
+  'mf-use-time': function (el) {
+    var t = $('#modalBody .mf[data-k="time"]');
+    if (t) { t.value = el.dataset.value; t.dispatchEvent(new Event('change')); }
+    var btn = $('#modalFoot [data-act="save-meeting"]');
+    if (btn) { btn.textContent = Modal.data.meetingId ? 'Save' : 'Schedule'; btn.classList.add('btn-primary'); btn.classList.remove('btn-danger'); }
+  },
   'save-outcome': function (el) { saveOutcome(el.dataset.id); },
 
   'add-doc': function () { openDocForm(); },
@@ -1015,9 +1115,7 @@ var ACTIONS = {
   'share-telegram': function (el) {
     var l = getLead(el.dataset.id);
     if (!l) return;
-    api('telegram', { text: leadSummary(l) }).then(function (r) {
-      toast(r && r.success ? 'Sent to your Telegram' : 'Telegram is not configured', r && r.success ? 'good' : 'warn');
-    });
+    sendTextToTelegram(leadSummary(l));
   },
 
   'wa-open': function (el) {
@@ -1041,13 +1139,11 @@ var ACTIONS = {
     var lead = getLead(($('#tplLead') || {}).value);
     if (!lead) return;
     window.location.href = 'mailto:' + encodeURIComponent(lead.email) +
-      '?subject=' + encodeURIComponent('Everstone Digital — ' + (lead.name || '')) +
+      '?subject=' + encodeURIComponent((brand().company ? brand().company + ' — ' : '') + (lead.name || '')) +
       '&body=' + encodeURIComponent(templateBody(el.dataset.id));
   },
   'tpl-tg': function (el) {
-    api('telegram', { text: templateBody(el.dataset.id) }).then(function (r) {
-      toast(r && r.success ? 'Sent to your Telegram' : 'Telegram is not configured', r && r.success ? 'good' : 'warn');
-    });
+    sendTextToTelegram(templateBody(el.dataset.id));
   },
 
   'ai-suggest': function (el) { sendAiMessage(el.dataset.value); },
@@ -1082,11 +1178,9 @@ var ACTIONS = {
   },
   'ai-copy': function (el) { copyText(el.dataset.value, el); },
   'ai-telegram': function (el) {
-    api('telegram', { text: el.dataset.value }).then(function (r) {
-      toast(r && r.success ? 'Sent to your Telegram' : 'Telegram is not configured', r && r.success ? 'good' : 'warn');
-    });
+    sendTextToTelegram(el.dataset.value);
   },
-  'ai-export': function (el) { exportContent(el.dataset.value, 'Evo answer'); },
+  'ai-export': function (el) { exportContent(el.dataset.value, 'AI answer'); },
   'ai-remove-attach': function (el) {
     Ai.attachments.splice(parseInt(el.dataset.index, 10), 1);
     renderAttachments();
@@ -1147,7 +1241,7 @@ var ACTIONS = {
       aiModel: ($('#aiModelDefault') || {}).value || 'fast'
     });
     closeModal();
-    toast('Evo will follow these from now on', 'good');
+    toast(aiName() + ' will follow these from now on', 'good');
   },
 
   'add-stage': function () {
@@ -1368,12 +1462,161 @@ var ACTIONS = {
       });
   },
 
-  'cmdk-run': function (el) { runCmdk(parseInt(el.dataset.index, 10)); }
+  'cmdk-run': function (el) { runCmdk(parseInt(el.dataset.index, 10)); },
+
+  /* ─── v7: the AI plan, meeting prep, proposals, your own templates ─────── */
+  'evo-plan': function () {
+    if (State.ui.evoPlanBusy) return;
+    State.ui.evoPlanBusy = true;
+    renderToday();
+    api('aiTask', { kind: 'nextActions', lang: State.settings.aiPlanLang || 'bn' }, { timeout: 150000 }).then(function (r) {
+      State.ui.evoPlanBusy = false;
+      State.ui.evoPlan = r && r.success ? { items: r.items || [], model: r.model, at: Date.now() } : { error: (r && (r.message || r.error)) || aiName() + ' did not answer.' };
+      if (r && r.success && !(r.items || []).length) State.ui.evoPlan.error = 'Nothing urgent — every open lead has a next step in hand.';
+      renderToday();
+    });
+  },
+  'plan-wa': function (el) {
+    var l = getLead(el.dataset.id);
+    if (!l) return;
+    var digits = digitsOnly(l.wa || l.phone);
+    if (digits.length === 11 && digits.charAt(0) === '0') digits = '88' + digits;
+    if (digits.length === 10) digits = '880' + digits;
+    window.open('https://wa.me/' + digits + '?text=' + encodeURIComponent(el.dataset.value || ''), '_blank', 'noopener');
+    Ops.logTouch(l.id, 'message', { outcome: 'Sent from the AI plan', direction: 'out' });
+  },
+  'meeting-prep': function (el) {
+    var m = getMeeting(el.dataset.id);
+    openModal({
+      title: 'Briefing — ' + ((m && m.title) || 'meeting'),
+      wide: true,
+      body: '<div class="col" style="align-items:center;padding:20px 0"><span class="typing"><i></i><i></i><i></i></span><div class="small muted" style="margin-top:10px">' + esc(aiName()) + ' is reading everything about this lead…</div></div>',
+      foot: ''
+    });
+    api('aiTask', { kind: 'meetingPrep', meetingId: el.dataset.id, lang: 'bn' }, { timeout: 150000 }).then(function (r) {
+      if (!$('#modal').classList.contains('show')) return;
+      if (!r || !r.success) {
+        openModal({ title: 'Could not prepare that', body: '<p class="small">' + esc((r && r.error) || 'No answer.') + '</p>' });
+        return;
+      }
+      openModal({
+        title: 'Briefing — ' + ((m && m.title) || 'meeting'),
+        wide: true,
+        body: '<div class="prose-box">' + esc(r.text) + '</div>',
+        foot: '<span class="spread tiny muted">' + esc(r.model || '') + '</span>' +
+          '<button class="btn" data-act="copy" data-value="' + esc(r.text) + '">Copy</button>' +
+          '<button class="btn" data-act="ai-telegram" data-value="' + esc(r.text) + '">' + icon('tg', 12) + ' To my Telegram</button>' +
+          '<button class="btn btn-primary" data-act="close-modal">Done</button>'
+      });
+    });
+  },
+  'proposal-draft': function (el) {
+    var l = getLead(el.dataset.id);
+    if (!l) return;
+    openModal({
+      title: 'Proposal for ' + l.name,
+      wide: true,
+      body: '<div class="field"><label>Anything ' + esc(aiName()) + ' should know? (optional)</label><input class="input" id="propBrief" placeholder="e.g. they want more calls from Google Maps, budget is tight"/></div>' +
+        '<div class="tiny muted">' + esc(aiName()) + ' uses everything on file — notes, meetings, the last audit — and quotes a monthly price only.</div>' +
+        '<div id="propOut"></div>',
+      foot: '<button class="btn" data-act="close-modal">Close</button><button class="btn btn-primary" data-act="proposal-run" data-id="' + esc(l.id) + '">Write it</button>'
+    });
+  },
+  'proposal-run': function (el) {
+    var out = $('#propOut');
+    if (!out) return;
+    el.disabled = true;
+    out.innerHTML = '<div class="row" style="padding:10px 0"><span class="typing"><i></i><i></i><i></i></span><span class="small muted">Writing… this takes up to a minute.</span></div>';
+    var la = State.ui.lastAudit && State.ui.lastAudit.leadId === el.dataset.id ? State.ui.lastAudit.text : '';
+    api('aiTask', { kind: 'proposal', leadId: el.dataset.id, brief: ($('#propBrief') || {}).value || '', audit: la }, { timeout: 180000 }).then(function (r) {
+      el.disabled = false;
+      if (!r || !r.success) { out.innerHTML = '<div class="small" style="color:var(--danger)">' + esc((r && r.error) || 'No answer.') + '</div>'; return; }
+      out.innerHTML = '<textarea class="textarea" id="propText" rows="16">' + esc(r.text) + '</textarea>' +
+        '<div class="row" style="margin-top:8px"><button class="btn btn-sm" data-act="copy-field" data-value="propText">Copy</button>' +
+        '<button class="btn btn-sm" data-act="proposal-export">Save as PDF / Word</button>' +
+        '<button class="btn btn-sm" data-act="proposal-mark" data-id="' + esc(el.dataset.id) + '">Mark proposal sent</button></div>';
+    });
+  },
+  'copy-field': function (el) { var f = document.getElementById(el.dataset.value); if (f) copyText(f.value, el); },
+  'proposal-export': function () { var f = $('#propText'); if (f) exportContent(f.value, 'Proposal'); },
+  'proposal-mark': function (el) {
+    var l = getLead(el.dataset.id);
+    if (!l) return;
+    Ops.saveLead({ id: l.id, proposalSentAt: Dates.today() }, { label: 'proposal sent' });
+    Ops.logTouch(l.id, 'proposal', { outcome: 'Proposal sent', direction: 'out' });
+    toast('Logged as sent', 'good');
+  },
+  'lead-summary': function (el) {
+    var l = getLead(el.dataset.id);
+    if (!l) return;
+    openModal({ title: 'Where ' + l.name + ' stands', narrow: true, body: '<div class="row"><span class="typing"><i></i><i></i><i></i></span></div>', foot: '' });
+    api('aiTask', { kind: 'summarizeLead', leadId: l.id, lang: 'bn' }, { timeout: 120000 }).then(function (r) {
+      if (!$('#modal').classList.contains('show')) return;
+      openModal({
+        title: 'Where ' + l.name + ' stands', narrow: true,
+        body: '<div class="prose-box">' + esc(r && r.success ? r.text : ((r && r.error) || 'No answer.')) + '</div>',
+        foot: '<button class="btn btn-primary" data-act="close-modal">Done</button>'
+      });
+    });
+  },
+  'tpl-new': function () { openTemplateEditor(null); },
+  'tpl-edit': function (el) { openTemplateEditor(el.dataset.id); },
+  'tpl-save': function (el) {
+    var name = String(($('#tplName') || {}).value || '').trim();
+    var body = String(($('#tplBody') || {}).value || '').trim();
+    if (!name || !body) { toast('A template needs a name and some text', 'warn'); return; }
+    var list = (Array.isArray(State.settings.templates) ? State.settings.templates : []).slice();
+    var id = el.dataset.id || uid('t');
+    var rec = { id: id, name: name, cat: String(($('#tplCat') || {}).value || '').trim() || 'Custom', body: body };
+    var i = -1;
+    list.forEach(function (t, k) { if (t.id === id) i = k; });
+    if (i >= 0) list[i] = rec; else list.unshift(rec);
+    Ops.saveSettings({ templates: list });
+    closeModal();
+    toast('Template saved — everyone in this account can use it', 'good');
+  },
+  'tpl-delete': function (el) {
+    var list = (Array.isArray(State.settings.templates) ? State.settings.templates : []).filter(function (t) { return t.id !== el.dataset.id; });
+    Ops.saveSettings({ templates: list });
+    closeModal();
+    toast('Template removed');
+  }
 };
+
+function openTemplateEditor(id) {
+  var t = null;
+  (Array.isArray(State.settings.templates) ? State.settings.templates : []).forEach(function (x) { if (x.id === id) t = x; });
+  openModal({
+    title: t ? 'Edit template' : 'New template',
+    wide: true,
+    body: '<div class="field-row"><div class="field"><label>Name</label><input class="input" id="tplName" value="' + esc(t ? t.name : '') + '" placeholder="Price follow-up"/></div>' +
+      '<div class="field"><label>Group</label><input class="input" id="tplCat" value="' + esc(t ? t.cat : '') + '" placeholder="Follow-up"/></div></div>' +
+      '<div class="field"><label>Text</label><textarea class="textarea" id="tplBody" rows="10" placeholder="Hi {{contact}},&#10;&#10;…&#10;&#10;{{signature}}">' + esc(t ? t.body : '') + '</textarea></div>' +
+      '<div class="tiny muted">Placeholders fill themselves in: {{contact}} {{name}} {{site}} {{service}} {{note}} {{date}} {{signature}} {{me}} {{company}}</div>',
+    foot: (t ? '<button class="btn btn-danger" data-act="tpl-delete" data-id="' + esc(t.id) + '">Delete</button>' : '') +
+      '<button class="btn" data-act="close-modal">Cancel</button><button class="btn btn-primary" data-act="tpl-save" data-id="' + esc(t ? t.id : '') + '">Save</button>'
+  });
+}
+
+/** Sends text to the signed-in person's own Telegram chat. */
+function sendTextToTelegram(text) {
+  api('telegram', { text: text }).then(function (r) {
+    if (r && r.success) { toast('Sent to your Telegram', 'good'); return; }
+    if (r && r.error === 'TG_NOT_LINKED') {
+      openModal({
+        title: 'Connect Telegram first', narrow: true,
+        body: '<div class="small">Your Telegram is not connected to your account yet. It takes ten seconds.</div>',
+        foot: '<button class="btn" data-act="close-modal">Later</button><button class="btn btn-primary" data-act="settings-go" data-value="telegram">Connect now</button>'
+      });
+      return;
+    }
+    toast((r && (r.message || r.error)) || 'Telegram did not answer', 'warn');
+  });
+}
 
 function templateBody(id) {
   var t = null;
-  TEMPLATES.forEach(function (x) { if (x.id === id) t = x; });
+  allTemplates().forEach(function (x) { if (x.id === id) t = x; });
   if (!t) return '';
   var picker = $('#tplLead');
   return fillTemplate(t.body, picker && picker.value ? getLead(picker.value) : null);
@@ -1664,9 +1907,7 @@ function wireStaticControls() {
           (l.nextStep ? '\n   ' + l.nextStep : '');
       }).join('\n') : 'Nothing overdue.') +
       '\n\nOpen pipeline: ' + Fmt.money(open.reduce(function (s, l) { return s + (Number(l.value) || 0); }, 0));
-    api('telegram', { text: text }).then(function (r) {
-      toast(r && r.success ? 'Sent to your Telegram' : 'Telegram is not configured', r && r.success ? 'good' : 'warn');
-    });
+    sendTextToTelegram(text);
   });
 
   // filters
@@ -1686,7 +1927,8 @@ function wireStaticControls() {
     });
   });
   $('#btnClearFilters').addEventListener('click', function () {
-    State.ui.filters = { search: '', stage: '', priority: '', source: '', label: '', health: '', sort: 'smart' };
+    State.ui.filters = { search: '', stage: '', priority: '', source: '', label: '', health: '', sort: 'smart', owner: '', added: '', addedFrom: '', addedTo: '' };
+    var fo = document.getElementById('fOwner'); if (fo) fo.value = '';
     renderLeads();
   });
   $('#fuRange').addEventListener('change', renderFollowups);
@@ -1842,6 +2084,8 @@ function renderEverything() {
 }
 
 function boot() {
+  App.booted = true;
+  if (!State.me && Cfg.me) State.me = Cfg.me;
   loadCache();
   if (!State.settings || !State.settings.stages) {
     State.settings = Object.assign({}, DEFAULT_SETTINGS);
@@ -1856,6 +2100,8 @@ function boot() {
     Outbox.flush();
     Alarm.check();
     if (State.ui.page === 'ai') loadChats();
+    if (typeof refreshMe === 'function') refreshMe();
+    openDeepLink();
   });
 
   setInterval(function () {
@@ -1869,8 +2115,16 @@ function boot() {
 
 function start() {
   applyTheme();
+  migrateLocalStorage();
+
+  // A public booking link shows only the booking page — no sign-in, no app.
+  var slug = (function () { try { return new URLSearchParams(location.search).get('book') || ''; } catch (e) { return ''; } })();
+  if (slug && typeof renderBookingPage === 'function') { renderBookingPage(slug); return; }
+
   wireStaticControls();
+  if (typeof wirePlatformControls === 'function') wirePlatformControls();
   Store.subscribe(renderEverything);
+  if (!State.me && Cfg.me) State.me = Cfg.me;
 
   // AI chats load the first time that page is opened, not before.
   var originalSwitch = switchPage;
@@ -1892,22 +2146,45 @@ function start() {
   var hash = (location.hash || '').replace('#', '');
   if (hash && PAGE_RENDERERS[hash]) State.ui.page = hash;
 
-  if (!Cfg.url) {
+  if (!Cfg.url && !window.EV_DEMO) {
     showGate('');
     setTimeout(openBackendSetup, 300);
     return;
   }
-  if (!Cfg.token) { showGate(''); return; }
+  // An invite link always goes through sign-in, even on a browser that is
+  // already signed in as someone else.
+  var invite = (function () { try { return new URLSearchParams(location.search).get('invite') || ''; } catch (e) { return ''; } })();
+  if (!Cfg.token || invite) { showGate(''); return; }
 
   hideGate();
   switchPage(State.ui.page);
   boot();
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', start);
-} else {
-  start();
+/** ?lead=<id>&ws=<account> — what Telegram's "Open in dashboard" links use. */
+function openDeepLink() {
+  var p;
+  try { p = new URLSearchParams(location.search); } catch (e) { return; }
+  var lead = p.get('lead'), ws = p.get('ws');
+  if (!lead) return;
+  if (ws && ws !== Cfg.ws && typeof switchWorkspace === 'function') {
+    var allowed = ((State.me && State.me.workspaces) || []).some(function (w) { return w.id === ws; });
+    if (allowed) {
+      switchWorkspace(ws);
+      setTimeout(function () { if (getLead(lead)) openDetail(lead); }, 2500);
+      if (typeof dropParams === 'function') dropParams(['lead', 'ws']);
+      return;
+    }
+  }
+  if (getLead(lead)) openDetail(lead);
+  if (typeof dropParams === 'function') dropParams(['lead', 'ws']);
+}
+
+// Started after every script on the page has loaded (platform.js and
+// booking.js replace some of the functions above). The demo starts it itself.
+if (!window.EV_MANUAL_START) {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else setTimeout(start, 0);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

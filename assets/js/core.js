@@ -9,16 +9,46 @@ var LS = {
   url: 'ev5_url',
   token: 'ev5_token',
   who: 'ev5_who',
-  cache: 'ev5_cache',
-  outbox: 'ev5_outbox',
+  cache: 'ev5_cache',            // v6 cache — moved into the per-workspace key on first v7 load
+  outbox: 'ev5_outbox',          // v6 outbox — moved into ev7_outbox on first v7 load
   theme: 'ev5_theme',
   drafts: 'ev5_drafts',
   clientId: 'ev5_gclient',
   seenAlarms: 'ev5_alarms',
   filters: 'ev5_filters',
   notesUi: 'ev6_notes_ui',
-  flowUi: 'ev6_flow_ui'
+  flowUi: 'ev6_flow_ui',
+  // v7
+  ws: 'ev7_ws',
+  me: 'ev7_me',
+  outbox7: 'ev7_outbox',
+  sidebar: 'ev7_sidebar',
+  settingsTab: 'ev7_settings_tab'
 };
+
+/** Cache keys are per workspace, so switching accounts never mixes data. */
+function wsKey(base) { return 'ev7:' + (Cfg.ws || 'main') + ':' + base; }
+
+var APP_CONFIG = window.EVERSTONE_CONFIG || {};
+
+/* What the assistant is called. The admin can rename it (Admin → Platform →
+   AI assistant name); config.js can set a default; this is the fallback. */
+function aiName() {
+  try { var v = localStorage.getItem('ev7_ainame'); if (v) return v; } catch (e) {}
+  return APP_CONFIG.aiName || 'Everstone Digital AI';
+}
+function setAiName(v) {
+  v = String(v || '').trim();
+  if (!v) return;
+  try { if (localStorage.getItem('ev7_ainame') !== v) localStorage.setItem('ev7_ainame', v); } catch (e) {}
+  applyAiName();
+}
+function applyAiName() {
+  var n = aiName();
+  document.querySelectorAll('[data-ai-name]').forEach(function (el) { if (el.textContent !== n) el.textContent = n; });
+  var inp = document.getElementById('aiInput');
+  if (inp) inp.placeholder = 'Ask anything, or tell ' + n + ' what to do…';
+}
 
 var SYNC_INTERVAL_MS = 90000;
 var OUTBOX_RETRY_MS = 20000;
@@ -131,6 +161,48 @@ var Fmt = {
     if (days < 365) return Math.floor(days / 30) + 'mo ago';
     return Math.floor(days / 365) + 'y ago';
   },
+  /** HH:mm in this browser's time, from an ISO timestamp. */
+  clock: function (iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d)) return '';
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  },
+  /** The local calendar day (yyyy-mm-dd) of an ISO timestamp. */
+  localDay: function (iso) {
+    if (!iso) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+    var d = new Date(iso);
+    if (isNaN(d)) return '';
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  },
+  /**
+   * A recorded value, readable. Dates become "13 Oct 2026" — including the
+   * "Tue Oct 13 2026 00:00:00 GMT+0600 (বাংলাদেশ মানক সময়)" text older
+   * versions stored — and money gets its currency.
+   */
+  value: function (v, field) {
+    if (v === null || v === undefined) return '';
+    var s = String(v).trim();
+    if (!s) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return Fmt.date(s);
+    if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(s)) {
+      var d = new Date(s.length === 16 ? s.replace(' ', 'T') : s);
+      if (!isNaN(d)) return Fmt.date(Fmt.localDay(d.toISOString())) + ', ' + Fmt.time(Fmt.clock(d.toISOString()));
+    }
+    var m = s.match(/^[A-Z][a-z]{2} ([A-Z][a-z]{2}) (\d{1,2}) (\d{4}) (\d{2}):(\d{2})/);
+    if (m) {
+      var mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(m[1]);
+      if (mon >= 0) {
+        var ymd = m[3] + '-' + String(mon + 1).padStart(2, '0') + '-' + String(m[2]).padStart(2, '0');
+        return Fmt.date(ymd) + (m[4] === '00' && m[5] === '00' ? '' : ', ' + Fmt.time(m[4] + ':' + m[5]));
+      }
+    }
+    if ((field === 'value' || field === 'proposalValue') && /^-?\d+(\.\d+)?$/.test(s)) return Fmt.money(s);
+    if (field === 'star') return /^(true|1|yes)$/i.test(s) ? 'starred' : 'not starred';
+    if (field === 'priority') return priorityMeta(s).name || s;
+    return s;
+  },
   dayLabel: function (iso) {
     var t = Dates.today();
     if (iso === t) return 'Today';
@@ -162,6 +234,48 @@ var Dates = {
     var d = new Date(iso);
     if (isNaN(d)) return null;
     return Math.floor((Date.now() - d.getTime()) / 86400000);
+  },
+  /** The calendar day a timestamp falls on, here. */
+  ymdOf: function (iso) {
+    if (!iso) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+    var d = new Date(iso);
+    if (isNaN(d)) return '';
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  },
+  /**
+   * A named range as { from, to, label } (inclusive days). Weeks start on
+   * Saturday, as they do here; the server uses the same rules.
+   */
+  range: function (name, from, to) {
+    if (!name) return null;
+    var t = Dates.today();
+    var y = Number(t.slice(0, 4)), m = Number(t.slice(5, 7));
+    var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+    var lastDay = function (yy, mm) { return new Date(yy, mm, 0).getDate(); };
+    var sinceSat = (new Date(t + 'T12:00:00').getDay() + 1) % 7;
+    switch (name) {
+      case 'today': return { from: t, to: t, label: 'Today' };
+      case 'yesterday': { var yd = Dates.addDays(t, -1); return { from: yd, to: yd, label: 'Yesterday' }; }
+      case 'week': return { from: Dates.addDays(t, -sinceSat), to: t, label: 'This week' };
+      case 'lastweek': { var e = Dates.addDays(t, -sinceSat - 1); return { from: Dates.addDays(e, -6), to: e, label: 'Last week' }; }
+      case '7d': return { from: Dates.addDays(t, -6), to: t, label: 'Last 7 days' };
+      case '30d': return { from: Dates.addDays(t, -29), to: t, label: 'Last 30 days' };
+      case 'month': return { from: y + '-' + p2(m) + '-01', to: t, label: 'This month' };
+      case 'lastmonth': { var ly = m === 1 ? y - 1 : y, lm = m === 1 ? 12 : m - 1; return { from: ly + '-' + p2(lm) + '-01', to: ly + '-' + p2(lm) + '-' + p2(lastDay(ly, lm)), label: 'Last month' }; }
+      case '2months': { var sy = m <= 1 ? y - 1 : y, sm = m <= 1 ? m + 11 : m - 1; return { from: sy + '-' + p2(sm) + '-01', to: t, label: 'Last 2 months' }; }
+      case '3months': { var ty = m <= 2 ? y - 1 : y, tm = m <= 2 ? m + 10 : m - 2; return { from: ty + '-' + p2(tm) + '-01', to: t, label: 'Last 3 months' }; }
+      case 'year': return { from: y + '-01-01', to: t, label: 'This year' };
+      case 'next7': return { from: t, to: Dates.addDays(t, 6), label: 'Next 7 days' };
+      case 'custom': {
+        var f = /^\d{4}-\d{2}-\d{2}$/.test(from || '') ? from : '', tt = /^\d{4}-\d{2}-\d{2}$/.test(to || '') ? to : '';
+        if (!f && !tt) return null;
+        f = f || tt; tt = tt || f;
+        if (tt < f) { var sw = f; f = tt; tt = sw; }
+        return { from: f, to: tt, label: 'Custom' };
+      }
+    }
+    return null;
   }
 };
 
@@ -178,13 +292,19 @@ var State = {
   flow: null,
   settings: {},
   templates: [],
+  me: null,
+  ws: null,
+  pendingUsers: 0,
+  perm: null,
+  members: [],
   ui: {
     page: 'today',
     selected: {},
     detailId: null,
     detailTab: 'overview',
-    filters: { search: '', stage: '', priority: '', source: '', label: '', health: '', sort: 'smart' },
+    filters: { search: '', stage: '', priority: '', source: '', label: '', health: '', sort: 'smart', owner: '', added: '', addedFrom: '', addedTo: '' },
     meetFilter: 'active',
+    meetRange: '', meetFrom: '', meetTo: '',
     archiveFilter: 'all',
     notesTab: 'notes',
     notesView: 'grid',
@@ -285,8 +405,51 @@ var DEFAULT_SETTINGS = {
   noteColors: ['#FFFFFF', '#FFF3C4', '#FFE0E0', '#E3F2E1', '#DDEBFF', '#EDE1FF', '#FFE7CC', '#E0F7FA'],
   recentLimit: 8,
   historyPageSize: 120,
-  showFlowStrip: true
+  showFlowStrip: true,
+  // v7
+  brand: { company: 'Everstone Digital', person: 'Nayemuzzaman', title: 'SEO & CRO Strategist', phone: '', website: '' },
+  timezone: 'Asia/Dhaka',
+  calendar: { followups: 'free', meetings: true },
+  booking: {
+    enabled: false, slug: '', title: 'Book a call', intro: '', durations: [30], days: [0, 1, 2, 3, 4, 6],
+    start: '10:00', end: '19:00', interval: 30, buffer: 0, minNoticeHours: 3, maxDays: 21,
+    location: 'Google Meet', link: '', checkCalendar: true, inviteGuest: true,
+    askPhone: true, askSite: true, askCompany: true, stage: '', thanks: ''
+  },
+  templates: null
 };
+
+/** Who this workspace speaks as — used by templates, WhatsApp openers and the AI. */
+function brand() {
+  var b = (State.settings && State.settings.brand) || {};
+  var d = DEFAULT_SETTINGS.brand;
+  var mainWs = !State.ws || State.ws.id === 'main';
+  return {
+    company: b.company !== undefined ? b.company : (mainWs ? d.company : ''),
+    person: b.person || (State.me && State.me.name) || (mainWs ? d.person : ''),
+    title: b.title !== undefined ? b.title : (mainWs ? d.title : ''),
+    phone: b.phone || '', website: b.website || ''
+  };
+}
+function signature() {
+  var b = brand();
+  return [b.person, b.title, b.company].filter(Boolean).join('\n');
+}
+function isAdminUser() { return !!(State.me && (State.me.role === 'owner' || State.me.role === 'admin')); }
+
+/* What the signed-in person may do in the open account (the server decides;
+   these only keep the screen honest). Before the first sync: everything. */
+function perm() { return State.perm || { level: 'admin', sections: {}, leads: 'all', money: true, export: true, del: true, manage: true }; }
+function canSee(section) { var p = perm(); return !p.sections || p.sections[section] !== false; }
+function canWriteWs() { return perm().level !== 'view'; }
+function canManageWs() { var p = perm(); return p.level === 'admin' || !!p.manage; }
+function canSeeMoney() { return perm().money !== false; }
+function memberName(email) {
+  var e = String(email || '').toLowerCase();
+  var hit = (State.members || []).filter(function (m) { return m.email === e; })[0];
+  return hit ? hit.name : (e ? e.split('@')[0] : '');
+}
+function isViewer() { return !!(State.me && State.me.role === 'viewer'); }
 
 /* ─── derived helpers ───────────────────────────────────────────────────── */
 function getLead(id) {
@@ -448,19 +611,20 @@ function reasonForAttention(lead) {
 /* ─── local cache ───────────────────────────────────────────────────────── */
 function saveCache() {
   try {
-    localStorage.setItem(LS.cache, JSON.stringify({
+    localStorage.setItem(wsKey('cache'), JSON.stringify({
       leads: State.leads, meetings: State.meetings, docs: State.docs,
       notes: State.notes, tasks: State.tasks,
       touches: State.touches.slice(-400), stageEvents: State.stageEvents.slice(-400),
       flow: State.flow,
-      activities: State.activities.slice(0, 200), settings: State.settings, at: Date.now()
+      activities: State.activities.slice(0, 200), settings: State.settings, ws: State.ws,
+      perm: State.perm, members: State.members, at: Date.now()
     }));
   } catch (e) { /* quota — the sheet is still the source of truth */ }
 }
 
 function loadCache() {
   try {
-    var raw = localStorage.getItem(LS.cache);
+    var raw = localStorage.getItem(wsKey('cache'));
     if (!raw) return false;
     var c = JSON.parse(raw);
     State.leads = c.leads || [];
@@ -473,8 +637,46 @@ function loadCache() {
     State.flow = c.flow || null;
     State.activities = c.activities || [];
     State.settings = Object.assign({}, DEFAULT_SETTINGS, c.settings || {});
+    if (c.ws) State.ws = c.ws;
+    State.perm = c.perm || null;
+    State.members = c.members || [];
     return true;
   } catch (e) { return false; }
+}
+
+/** Empties the in-memory data, for a workspace switch. */
+function resetState() {
+  State.leads = []; State.meetings = []; State.docs = []; State.activities = [];
+  State.notes = []; State.tasks = []; State.touches = []; State.stageEvents = [];
+  State.flow = null; State.settings = Object.assign({}, DEFAULT_SETTINGS);
+  State.perm = null; State.members = [];
+  State.ui.selected = {}; State.ui.detailId = null;
+  State.ui.historyRows = []; State.ui.historyFacets = null; State.ui.historyTotal = 0;
+}
+
+/**
+ * One-time move of v6 browser data into the v7 layout. The v6 outbox may hold
+ * edits made offline that never reached the sheet; they all belonged to the
+ * main workspace, so they are kept and sent there. Nothing is thrown away.
+ */
+function migrateLocalStorage() {
+  try {
+    var old = localStorage.getItem(LS.outbox);
+    if (old) {
+      var items = JSON.parse(old || '[]');
+      if (items.length) {
+        var cur = JSON.parse(localStorage.getItem(LS.outbox7) || '[]');
+        items.forEach(function (i) { if (!i.ws) i.ws = 'main'; cur.push(i); });
+        localStorage.setItem(LS.outbox7, JSON.stringify(cur));
+      }
+      localStorage.removeItem(LS.outbox);
+    }
+    var oldCache = localStorage.getItem(LS.cache);
+    if (oldCache) {
+      if (!localStorage.getItem('ev7:main:cache')) localStorage.setItem('ev7:main:cache', oldCache);
+      localStorage.removeItem(LS.cache);
+    }
+  } catch (e) { /* storage blocked — nothing to migrate */ }
 }
 
 /* ─── store / render bus ────────────────────────────────────────────────── */
@@ -528,50 +730,69 @@ var UndoStack = {
 
 /* ─── network ───────────────────────────────────────────────────────────── */
 var Cfg = {
-  get url() { return localStorage.getItem(LS.url) || ''; },
+  get url() { return localStorage.getItem(LS.url) || APP_CONFIG.apiUrl || ''; },
   set url(v) { localStorage.setItem(LS.url, v || ''); },
   get token() { return localStorage.getItem(LS.token) || ''; },
   set token(v) { v ? localStorage.setItem(LS.token, v) : localStorage.removeItem(LS.token); },
   get who() { return localStorage.getItem(LS.who) || ''; },
   set who(v) { localStorage.setItem(LS.who, v || ''); },
   get clientId() { return localStorage.getItem(LS.clientId) || ''; },
-  set clientId(v) { localStorage.setItem(LS.clientId, v || ''); }
+  set clientId(v) { localStorage.setItem(LS.clientId, v || ''); },
+  get ws() { return localStorage.getItem(LS.ws) || ''; },
+  set ws(v) { v ? localStorage.setItem(LS.ws, v) : localStorage.removeItem(LS.ws); },
+  get me() { try { return JSON.parse(localStorage.getItem(LS.me) || 'null'); } catch (e) { return null; } },
+  set me(v) { v ? localStorage.setItem(LS.me, JSON.stringify(v)) : localStorage.removeItem(LS.me); }
 };
 
-/**
- * Apps Script rejects a preflight, so requests go out as text/plain — that
- * keeps them "simple" in CORS terms and avoids the OPTIONS round trip.
- */
+var PUBLIC_ACTIONS = { ping: 1, publicConfig: 1, login: 1, otpRequest: 1, otpVerify: 1, requestAccess: 1, inviteInfo: 1, bookingPage: 1, bookSlot: 1 };
+
+/** The one place a request leaves the browser. The demo swaps this out. */
+function transport(method, url, payload, signal) {
+  if (window.EV_DEMO && window.EV_DEMO.request) return window.EV_DEMO.request(method, payload);
+  if (method === 'GET') {
+    var qs = Object.keys(payload).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(payload[k]); }).join('&');
+    return fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + qs, { method: 'GET', signal: signal }).then(function (r) { return r.json(); });
+  }
+  // Apps Script rejects a preflight, so requests go out as text/plain — that
+  // keeps them "simple" in CORS terms and avoids the OPTIONS round trip.
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload),
+    signal: signal
+  }).then(function (r) { return r.json(); });
+}
+
 function api(action, body, opts) {
   opts = opts || {};
-  if (!Cfg.url) return Promise.resolve({ success: false, error: 'NO_URL' });
+  if (!Cfg.url && !window.EV_DEMO) return Promise.resolve({ success: false, error: 'NO_URL' });
 
   var timeoutMs = opts.timeout || 45000;
   var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   var timer = setTimeout(function () { if (controller) controller.abort(); }, timeoutMs);
+  var ws = opts.ws !== undefined ? opts.ws : Cfg.ws;
+  var isPublic = !!PUBLIC_ACTIONS[action];
 
   var request;
   if (action === 'getAll') {
-    request = fetch(
-      Cfg.url + '?action=getAll&token=' + encodeURIComponent(Cfg.token) + '&_=' + Date.now(),
-      { method: 'GET', signal: controller ? controller.signal : undefined }
-    );
+    var q = { action: 'getAll', token: Cfg.token, _: Date.now() };
+    if (ws) q.ws = ws;
+    request = transport('GET', Cfg.url, q, controller ? controller.signal : undefined);
   } else {
-    request = fetch(Cfg.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(Object.assign({ action: action, token: Cfg.token }, body || {})),
-      signal: controller ? controller.signal : undefined
-    });
+    var payload = Object.assign({ action: action }, isPublic ? {} : { token: Cfg.token }, (!isPublic && ws) ? { ws: ws } : {}, body || {});
+    request = transport('POST', Cfg.url, payload, controller ? controller.signal : undefined);
   }
 
   return request
-    .then(function (r) { return r.json(); })
     .then(function (data) {
       clearTimeout(timer);
-      if (data && data.success === false && data.error === 'AUTH') {
+      if (data && data.success === false && data.error === 'AUTH' && !isPublic) {
         Cfg.token = '';
-        showGate('Your session expired. Sign in again.');
+        var why = data.reason === 'blocked' ? 'This account has been switched off. Ask the admin.'
+          : data.reason === 'expired' ? 'Your access has ended. Ask the admin to extend it.'
+          : data.reason === 'pending' ? 'Your access is waiting for approval.'
+          : 'Your session expired. Sign in again.';
+        if (typeof showGate === 'function') showGate(why);
       }
       return data;
     })
@@ -587,25 +808,36 @@ var Outbox = {
   flushing: false,
 
   load: function () {
-    try { this.items = JSON.parse(localStorage.getItem(LS.outbox) || '[]'); }
+    try { this.items = JSON.parse(localStorage.getItem(LS.outbox7) || '[]'); }
     catch (e) { this.items = []; }
   },
   persist: function () {
-    try { localStorage.setItem(LS.outbox, JSON.stringify(this.items)); } catch (e) {}
+    try { localStorage.setItem(LS.outbox7, JSON.stringify(this.items)); } catch (e) {}
   },
   add: function (action, body, meta) {
     this.items.push({
-      opId: uid('op'), action: action, body: body || {},
+      opId: uid('op'), action: action, body: body || {}, ws: Cfg.ws || '', who: Cfg.who || '',
       meta: meta || {}, tries: 0, at: Date.now()
     });
     this.persist();
     setSync();
     this.flush();
   },
+  mine: function () {
+    var ws = Cfg.ws || '';
+    return this.items.filter(function (i) { return (i.ws || '') === ws || (!i.ws && ws === 'main'); });
+  },
+  /** Edits made by whoever is signed in now. Someone else's queued edits on a
+   *  shared computer wait for them to sign back in; they are never sent under
+   *  another person's session. */
+  sendable: function () {
+    var who = Cfg.who || '';
+    return this.items.filter(function (i) { return !i.who || !who || i.who === who; });
+  },
   /** Ids with unsent writes — a pull must not overwrite these. */
   pendingLeadIds: function () {
     var s = {};
-    this.items.forEach(function (i) {
+    this.mine().forEach(function (i) {
       var id = (i.body && i.body.lead && i.body.lead.id) || (i.body && i.body.id);
       if (id) s[String(id)] = true;
       if (i.body && Array.isArray(i.body.ids)) i.body.ids.forEach(function (x) { s[String(x)] = true; });
@@ -614,7 +846,7 @@ var Outbox = {
   },
   pendingMeetingIds: function () {
     var s = {};
-    this.items.forEach(function (i) {
+    this.mine().forEach(function (i) {
       if (i.action === 'saveMeeting' && i.body && i.body.meeting && i.body.meeting.id) {
         s[String(i.body.meeting.id)] = true;
       }
@@ -624,7 +856,7 @@ var Outbox = {
   /** Generic version for the collections added in v6. */
   pendingIdsFor: function (key) {
     var s = {};
-    this.items.forEach(function (i) {
+    this.mine().forEach(function (i) {
       var obj = i.body && i.body[key];
       if (obj && obj.id) s[String(obj.id)] = true;
       if (i.body && i.body.id && (i.action.toLowerCase().indexOf(key) >= 0)) s[String(i.body.id)] = true;
@@ -634,22 +866,31 @@ var Outbox = {
 
   flush: function () {
     if (this.flushing || !this.items.length) { setSync(); return Promise.resolve(); }
-    if (!navigator.onLine || !Cfg.url || !Cfg.token) { setSync(); return Promise.resolve(); }
+    if (!navigator.onLine || (!Cfg.url && !window.EV_DEMO) || !Cfg.token) { setSync(); return Promise.resolve(); }
+    var ready = this.sendable();
+    if (!ready.length) { setSync(); return Promise.resolve(); }
 
     this.flushing = true;
     var self = this;
-    var item = this.items[0];
+    var item = ready[0];
+    var drop = function () {
+      var i = self.items.indexOf(item);
+      if (i >= 0) self.items.splice(i, 1);
+    };
+    var sameWs = (item.ws || 'main') === (Cfg.ws || 'main');
 
-    return api(item.action, Object.assign({ opId: item.opId }, item.body), { timeout: 60000 })
+    // Every queued write goes to the workspace it was made in, even if you
+    // have switched to another one since.
+    return api(item.action, Object.assign({ opId: item.opId }, item.body), { timeout: 60000, ws: item.ws || undefined })
       .then(function (res) {
         if (res && res.success) {
-          self.items.shift();
+          drop();
           self.persist();
-          if (res.lead) mergeServerLead(res.lead);
-          if (res.meeting) mergeServerMeeting(res.meeting);
+          if (sameWs && res.lead) mergeServerLead(res.lead);
+          if (sameWs && res.meeting) mergeServerMeeting(res.meeting);
           self.flushing = false;
           setSync();
-          if (self.items.length) return self.flush();
+          if (self.sendable().length) return self.flush();
           Store.notify();
           return null;
         }
@@ -659,9 +900,9 @@ var Outbox = {
           res.error !== 'NETWORK' && res.error !== 'AUTH';
 
         if (permanent) {
-          self.items.shift();
+          drop();
           self.persist();
-          toast('Could not save: ' + res.error, 'err', 8000);
+          toast('Could not save: ' + (res.message || res.error), 'err', 8000);
         } else {
           item.tries++;
           self.persist();
@@ -669,6 +910,7 @@ var Outbox = {
         self.flushing = false;
         setSync();
         if (!permanent) setTimeout(function () { self.flush(); }, OUTBOX_RETRY_MS);
+        else if (self.sendable().length) return self.flush();
         return null;
       })
       .catch(function () {
@@ -755,7 +997,7 @@ function setSync() {
   if (!navigator.onLine) { dot.classList.add('warn'); txt.textContent = 'Offline'; }
   else if (State.ui.syncing) { dot.classList.add('busy'); txt.textContent = 'Syncing'; }
   else if (Outbox.items.length) { dot.classList.add('busy'); txt.textContent = Outbox.items.length + ' to save'; }
-  else if (!Cfg.url) { dot.classList.add('warn'); txt.textContent = 'Not connected'; }
+  else if (!Cfg.url && !window.EV_DEMO) { dot.classList.add('warn'); txt.textContent = 'Not connected'; }
   else { txt.textContent = 'Saved'; }
 
   var badge = $('#syncBadge');
@@ -767,16 +1009,32 @@ function setSync() {
 }
 
 function pullFromServer(silent) {
-  if (!Cfg.url || !Cfg.token) return Promise.resolve(false);
+  if ((!Cfg.url && !window.EV_DEMO) || !Cfg.token) return Promise.resolve(false);
   State.ui.syncing = true; setSync();
+  var wsAtStart = Cfg.ws;
 
   return api('getAll', {}, { timeout: 60000 }).then(function (res) {
     State.ui.syncing = false;
 
     if (!res || !res.success) {
       setSync();
-      if (!silent) toast(res && res.error === 'NETWORK' ? 'Cannot reach the sheet' : 'Sync failed', 'warn');
+      if (!silent && res && res.error !== 'AUTH') toast(res && res.error === 'NETWORK' ? 'Cannot reach the sheet' : 'Sync failed: ' + (res && res.error || ''), 'warn');
       return false;
+    }
+    // A reply for a workspace you have since switched away from is dropped,
+    // so it can never paint one account's leads into another's screen.
+    if ((wsAtStart || '') !== (Cfg.ws || '')) return false;
+    if (res.ws && res.ws.id && res.ws.id !== Cfg.ws) {
+      // The account asked for is gone or no longer yours; the server answered
+      // for your default one. Drop what was on screen so the two never mix.
+      var hadOther = !!Cfg.ws;
+      Cfg.ws = res.ws.id;
+      if (hadOther) { resetState(); loadCache(); }
+    }
+    if (res.ws) State.ws = res.ws;
+    if (res.me) {
+      State.me = Object.assign({}, State.me || {}, res.me);
+      Cfg.me = State.me;
     }
 
     var pendingLeads = Outbox.pendingLeadIds();
@@ -817,6 +1075,10 @@ function pullFromServer(silent) {
 
     if (res.settings) State.settings = Object.assign({}, DEFAULT_SETTINGS, res.settings);
     if (res.version) State.serverVersion = res.version;
+    State.pendingUsers = Number(res.pendingUsers) || 0;
+    State.perm = res.perm || null;
+    State.members = res.members || [];
+    if (res.aiName) setAiName(res.aiName);
 
     setSync();
     Store.notify();
@@ -975,6 +1237,7 @@ var Ops = {
     Ops.saveLead({
       id: id,
       followup: nextDate,
+      followupDone: true,
       history: (lead.history || []).concat([
         new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) +
         ': Followed up' + (previous ? ' (was due ' + previous + ')' : '')
