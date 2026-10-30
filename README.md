@@ -1,4 +1,4 @@
-# Everstone Lead Tracker — dashboard (v7)
+# Everstone Lead Tracker — dashboard (v8.0 · build 42)
 
 The web dashboard for the Everstone Digital lead tracker. Static files only:
 open `index.html` and it runs. No build step, no npm, no framework.
@@ -16,6 +16,9 @@ assets/js/ai.js         the AI assistant (Everstone Digital AI)
 assets/js/platform.js   sign-in, accounts, people and access, the admin console
 assets/js/reports.js    the Reports page, the live date, date filters on Leads and Meetings
 assets/js/booking.js    the public booking page (index.html?book=<link name>)
+assets/js/version.js    the version number — add 1 to `build` on every release
+assets/js/guide.js      the words of the in-app Guide (English and Bangla)
+assets/js/v8.js         delete for good, move/copy, photos, Guide, help, updates
 assets/img/             logo and icons
 netlify.toml            headers and SPA routing for Netlify
 ```
@@ -106,3 +109,36 @@ Edits made without a connection are queued in local storage and replayed in
 order when the connection returns, so a dropped signal mid-edit does not lose
 the change. The queue survives a page reload, and each person's queue is kept
 apart on a shared computer.
+
+## Releasing a new version
+
+1. Open `assets/js/version.js`, add 1 to `build` (41 → 42) and write two or
+   three lines in `notes`. Change `version` only for a big release.
+2. Upload the files to GitHub. Netlify publishes them.
+3. Everyone who has the dashboard open sees "A new version is ready — Reload"
+   within five minutes, and "What's new" once after reloading.
+
+If the release also changes `Code.gs`, paste it into Apps Script and press
+Deploy → Manage deployments → ✎ Edit → Version: **New version** → Deploy.
+The web-app address stays the same. When the backend is older than the
+dashboard expects (`backend` in version.js), admins see a yellow bar.
+
+## v8 — what changed
+
+- **Delete for good**: one lead (its details or the Archive page), everything
+  selected (bottom bar), or "Empty archive". Removes the lead and its
+  meetings, notes, tasks, documents and history from the sheet. Archive still
+  exists and is still the safe choice.
+- **Move / copy between accounts**: nothing ever crosses accounts on its own.
+  The Add-lead form can also put a new lead straight into another account.
+  The account switcher turns amber whenever you are not in main.
+- **Admin**: delete a person (optionally with the accounts only they used) and
+  delete an account (its spreadsheet goes to the Drive trash for 30 days).
+- **Profile photo**: avatar → Change photo. Stored small (192 px).
+- **Guide** page, a **?** on every page, a first-visit tip per page, English /
+  বাংলা, and "Ask the AI" answered from the guide.
+- **Fixed**: drag-selecting text in a form and letting go outside it no longer
+  closes the form. Google sign-in explains any problem instead of vanishing,
+  and Admin → Platform → "Google sign-in check" lists what Google needs.
+- Reading pages are capped at a comfortable width on big screens; Pipeline
+  and the AI chat still use the full screen.

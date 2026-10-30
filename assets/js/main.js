@@ -750,7 +750,7 @@ function collectSettings() {
     aiInstructions: ($('#setAiInstructions') || {}).value || '',
     aiModel: ($('#setAiModel') || {}).value || 'fast',
     alarmEnabled: !!($('#setAlarm') || {}).checked,
-    recentLimit: Number(($('#setRecentLimit') || {}).value) || 8,
+    recentLimit: Math.min(60, Number(($('#setRecentLimit') || {}).value) || 30),
     showFlowStrip: $('#setShowFlow') ? !!$('#setShowFlow').checked : true,
     stageTouchMap: Object.keys(touchMap).length ? touchMap : State.settings.stageTouchMap
   };
@@ -1859,8 +1859,21 @@ if ($('#cmdkInput')) {
     if (e.key === 'Enter') { e.preventDefault(); runCmdk(Cmdk.index); }
   });
 }
-$('#cmdk').addEventListener('click', function (e) { if (e.target === this) closeCmdk(); });
-$('#modal').addEventListener('click', function (e) { if (e.target === this) closeModal(); });
+/** Closes an overlay only on a real click on its backdrop. A text selection
+ *  that starts inside a field and is released over the backdrop also fires
+ *  "click" on the backdrop — that used to close the form and lose the typing. */
+function onBackdropClick(el, fn) {
+  if (!el) return;
+  var downOnBackdrop = false;
+  el.addEventListener('pointerdown', function (e) { downOnBackdrop = e.target === el; });
+  el.addEventListener('click', function (e) {
+    var ok = downOnBackdrop && e.target === el;
+    downOnBackdrop = false;
+    if (ok) fn(e);
+  });
+}
+onBackdropClick($('#cmdk'), function () { closeCmdk(); });
+onBackdropClick($('#modal'), function () { closeModal(); });
 
 /* ─── static controls ───────────────────────────────────────────────────── */
 function wireStaticControls() {
@@ -1875,7 +1888,7 @@ function wireStaticControls() {
   });
 
   $('#drawerClose').addEventListener('click', closeDetail);
-  $('#scrim').addEventListener('click', closeDetail);
+  onBackdropClick($('#scrim'), closeDetail);
   $('#drawerStar').addEventListener('click', function () {
     var l = getLead(State.ui.detailId);
     if (l) Ops.saveLead({ id: l.id, star: !l.star }, { label: 'star' });

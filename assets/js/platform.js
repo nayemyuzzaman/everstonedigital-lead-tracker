@@ -157,12 +157,57 @@ GoogleAuth.start = function () {
     self.render();
   });
 };
+/* v8: Google sign-in never fails silently any more. When the button cannot
+   load, the gate says why in one line (and how to fix it lives in
+   Admin → Platform → Google sign-in check). The script is also loaded on
+   demand, so a slow network or a late async tag does not lose the button. */
+/** Admin → Platform: what Google needs, with this site's own address filled in. */
+function googleCheckHtml(c) {
+  var id = (c && c.GOOGLE_CLIENT_ID) || Cfg.clientId || '';
+  var ok = '<span class="chip chip-good">ok</span>', no = '<span class="chip chip-danger">missing</span>';
+  return '<div class="kv">' +
+      '<dt>Client ID</dt><dd>' + (id ? ok + ' <span class="tiny muted">' + esc(id.slice(0, 14)) + '…</span>' : no) + '</dd>' +
+      '<dt>This site</dt><dd><code>' + esc(location.origin) + '</code> ' + copyBtn(location.origin, 'Copy') + '</dd>' +
+      '<dt>Google script</dt><dd>' + (window.google && google.accounts && google.accounts.id ? ok : '<span class="chip chip-warm">not loaded on this page</span>') + '</dd>' +
+      (GoogleAuth.lastError ? '<dt>Last problem</dt><dd class="small">' + esc(GoogleAuth.lastError) + '</dd>' : '') +
+    '</div>' +
+    '<ol class="g-steps small">' +
+      '<li>Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud → Credentials ↗</a> and open the OAuth client whose ID is above (type: <b>Web application</b>).</li>' +
+      '<li>Under <b>Authorized JavaScript origins</b> add <code>' + esc(location.origin) + '</code> (no slash at the end). Add your custom domain too if you have one.</li>' +
+      '<li>Open <b>OAuth consent screen</b>. If it says <b>Testing</b>, press <b>Publish app</b> — or add every teammate under Test users. Otherwise Google blocks everyone but you.</li>' +
+      '<li>Save, wait 5 minutes, then reload this page in a private window and try the Google button.</li>' +
+    '</ol>' +
+    '<div class="tiny muted">Teammates still need access here first (Admin → People). Google only proves who they are.</div>';
+}
+
+GoogleAuth.ensureScript = function () {
+  if (window.google && google.accounts && google.accounts.id) return;
+  if (document.querySelector('script[data-gsi]')) return;
+  var has = [].some.call(document.scripts, function (s) { return /accounts\.google\.com\/gsi\/client/.test(s.src); });
+  if (has && this.waited < 12) return;
+  var s = document.createElement('script');
+  s.src = 'https://accounts.google.com/gsi/client';
+  s.async = true; s.defer = true; s.setAttribute('data-gsi', '1');
+  document.head.appendChild(s);
+};
+GoogleAuth.fail = function (msg) {
+  var box = $('#googleBtn');
+  var w = $('#googleWrap'); if (w) w.hidden = false;
+  if (box) box.innerHTML = '<div class="g-fail">' + icon('alert', 13) + '<span>' + esc(msg) + '</span></div>';
+  var or = $('#gateOr'); if (or) or.hidden = false;
+  GoogleAuth.lastError = msg;
+};
 GoogleAuth.render = function () {
   var box = $('#googleBtn');
-  if (!box || this.rendered) return;
+  if (!box) return;
+  // Rendered before, but the button has gone (sign out, theme change): draw again.
+  if (this.rendered && box.querySelector('iframe, div[role="button"]')) return;
+  this.rendered = false;
+  if (!Cfg.clientId) { this.fail('Google sign-in is not set up yet. Use the email code below.'); return; }
   if (!(window.google && google.accounts && google.accounts.id)) {
     this.waited += 1;
-    if (this.waited > 40) { var w = $('#googleWrap'); if (w) w.hidden = true; return; }
+    if (this.waited === 1 || this.waited === 12) this.ensureScript();
+    if (this.waited > 48) { this.fail('Google could not load here (an ad blocker or a blocked network). Use the email code below.'); return; }
     var self = this;
     setTimeout(function () { self.render(); }, 250);
     return;
@@ -174,18 +219,27 @@ GoogleAuth.render = function () {
         if (!resp || !resp.credential) { gateErr('Google returned nothing. Try again.'); return; }
         doLogin({ idToken: resp.credential });
       },
-      auto_select: false, cancel_on_tap_outside: true, use_fedcm_for_prompt: true
+      auto_select: false, cancel_on_tap_outside: true, use_fedcm_for_prompt: true, itp_support: true
     });
     box.innerHTML = '';
     var width = Math.max(200, Math.min(320, (box.parentElement || box).clientWidth || 300));
     google.accounts.id.renderButton(box, {
       theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'filled_black' : 'outline',
-      size: 'large', width: width, text: 'signin_with', shape: 'rectangular'
+      size: 'large', width: width, text: 'signin_with', shape: 'rectangular', logo_alignment: 'center'
     });
     this.rendered = true;
     var or = $('#gateOr'); if (or) or.hidden = false;
+    // Google draws an empty frame when this site is not on the client's list
+    // of allowed origins. Catch that and say so.
+    var self2 = this;
+    setTimeout(function () {
+      var b = $('#googleBtn');
+      if (b && !b.querySelector('iframe, div[role="button"]') && !$('#gate').hidden) {
+        self2.fail('Google did not show its button for ' + location.origin + '. The admin must add this address under "Authorized JavaScript origins".');
+      }
+    }, 5000);
   } catch (e) {
-    var w2 = $('#googleWrap'); if (w2) w2.hidden = true;
+    this.fail('Google sign-in could not start: ' + (e && e.message ? e.message : e));
     console.warn('Google sign-in could not start', e);
   }
 };
@@ -792,6 +846,7 @@ function personRowHtml(u) {
       ? '<button class="btn btn-sm btn-primary" data-act="admin-approve" data-value="' + esc(u.email) + '">Approve</button><button class="btn btn-sm" data-act="admin-reject" data-value="' + esc(u.email) + '">Reject</button>'
       : '<button class="btn btn-sm" data-act="admin-edit-user" data-value="' + esc(u.email) + '">' + icon('edit', 12) + ' Access</button>' +
         (u.status === 'invited' ? '<button class="btn btn-sm" data-act="admin-reinvite" data-value="' + esc(u.email) + '" title="New invite link">Link</button>' : '')) +
+    (u.role !== 'owner' && u.email !== Cfg.who ? '<button class="btn btn-sm btn-ghost btn-icon danger-hover" data-act="v8-delete-user" data-value="' + esc(u.email) + '" title="Delete this person for good">' + icon('trash', 13) + '</button>' : '') +
     '</div></div>';
 }
 
@@ -892,7 +947,7 @@ function grantChoiceHtml(prefix, defName, opts) {
   var owner = State.me && State.me.role === 'owner';
   return '<div class="radio-list grant-kind" data-prefix="' + prefix + '">' +
     '<label class="radio-row"><input type="radio" name="' + prefix + 'Kind" value="own" checked/><span><b>Their own account</b>, ' +
-    '<select class="select select-inline" id="' + prefix + 'Clone"><option value="settings">set up like</option><option value="copy">an exact copy (every lead) of</option><option value="blank">blank — not like</option></select> ' +
+    '<select class="select select-inline" id="' + prefix + 'Clone"><option value="settings">set up like (no leads)</option><option value="copy">an exact copy — duplicates every lead — of</option><option value="blank">blank — not like</option></select> ' +
     '<select class="select select-inline" id="' + prefix + 'From">' + wsOptions(Cfg.ws || 'main') + '</select><br/>' +
     '<span class="tiny muted">They manage it. Same stages, labels, templates and AI instructions; empty unless you pick the exact copy.</span></span></label>' +
     '<label class="radio-row"><input type="radio" name="' + prefix + 'Kind" value="custom"/><span><b>Access to accounts you choose</b><br/>' +
@@ -1165,6 +1220,7 @@ function adminAccountsHtml() {
         '<button class="btn btn-sm" data-act="admin-ws-activity" data-id="' + esc(w.id) + '">Activity</button>' +
         '<button class="btn btn-sm" data-act="admin-ws-edit" data-id="' + esc(w.id) + '">' + icon('edit', 12) + '</button>' +
         (w.sheetUrl ? '<a class="btn btn-sm" href="' + esc(w.sheetUrl) + '" target="_blank" rel="noopener" title="Open the spreadsheet">Sheet</a>' : '') +
+        (w.id !== 'main' ? '<button class="btn btn-sm btn-ghost btn-icon danger-hover" data-act="v8-delete-ws" data-id="' + esc(w.id) + '" title="Delete this account for good">' + icon('trash', 13) + '</button>' : '') +
         '</div></div></div>';
     }).join('') + '</div>';
 }
@@ -1177,7 +1233,7 @@ function openNewWorkspace() {
       '<div class="field"><label>Name</label><input class="input" id="nwName" placeholder="Rahim — Dhaka dentals"/></div>' +
       '<div class="field"><label>Start from</label><div class="radio-list">' +
       '<label class="radio-row"><input type="radio" name="nwMode" value="settings" checked/><span><b>Same dashboard as</b> <select class="select select-inline" id="nwFrom">' + wsOptions(Cfg.ws || 'main') + '</select><br/><span class="tiny muted">Stages, labels, templates and AI instructions — no leads.</span></span></label>' +
-      '<label class="radio-row"><input type="radio" name="nwMode" value="copy"/><span><b>Exact copy, every lead included</b></span></label>' +
+      '<label class="radio-row"><input type="radio" name="nwMode" value="copy"/><span><b>Exact copy, every lead included</b><br/><span class="tiny" style="color:var(--warm)">Duplicates all of that account’s leads into the new one. Usually you want the first option.</span></span></label>' +
       '<label class="radio-row"><input type="radio" name="nwMode" value="blank"/><span><b>Blank</b></span></label></div></div>' +
       '<div class="field"><label>Who can open it</label><div class="check-list">' + users.filter(function (u) { return u.role !== 'owner' && u.role !== 'admin'; }).map(function (u) {
         return '<div class="check-row nw-row"><span class="grow">' + esc(u.name || u.email) + ' <span class="tiny muted">' + esc(u.email) + '</span></span>' +
@@ -1459,6 +1515,7 @@ function adminPlatformHtml() {
       (owner ? '<div class="field" style="margin-top:10px"><label>Other admins (emails, comma separated)</label><input class="input" id="cfgAdmins" value="' + esc(c.ADMIN_EMAILS || '') + '"/></div>' +
         '<div class="field" style="margin-top:10px"><label>Owner password (for “Other ways to sign in”)</label><input class="input" id="cfgPw" value="' + esc(c.APP_PASSWORD || '') + '"/></div>' : '') +
       '<button class="btn btn-primary btn-sm" data-act="cfg-save" style="margin-top:12px">Save</button>') +
+    chartCard('Google sign-in check', googleCheckHtml(c)) +
     chartCard('Run now',
       '<div class="tiny muted" style="margin-bottom:8px">These also run on their own every day.</div>' +
       '<div class="row">' + jobs.map(function (j) { return '<button class="btn btn-sm" data-act="admin-run" data-value="' + j[0] + '">' + esc(j[1]) + '</button>'; }).join('') + '</div>' +

@@ -403,7 +403,7 @@ var DEFAULT_SETTINGS = {
     { key: 'note', label: 'Note', color: '#64748B' }
   ],
   noteColors: ['#FFFFFF', '#FFF3C4', '#FFE0E0', '#E3F2E1', '#DDEBFF', '#EDE1FF', '#FFE7CC', '#E0F7FA'],
-  recentLimit: 8,
+  recentLimit: 30,
   historyPageSize: 120,
   showFlowStrip: true,
   // v7

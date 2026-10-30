@@ -90,7 +90,9 @@ function renderRecentStrip() {
   var wrap = $('#recentStrip');
   if (!wrap) return;
 
-  var limit = Number(State.settings.recentLimit) || 8;
+  // v8: the strip scrolls now, so it can hold far more. The old default (8) counts as "not chosen".
+  var limit = Number(State.settings.recentLimit) || 30;
+  if (limit === 8) limit = 30;
   var list = recentlyWorked(limit);
   if (!list.length) { wrap.innerHTML = ''; return; }
 
@@ -115,6 +117,7 @@ function renderRecentStrip() {
   });
 
   wrap.innerHTML = out.join('');
+  if (typeof v8RecentArrows === 'function') v8RecentArrows();
 }
 
 /** Today and yesterday read better as words; anything older wants a date. */
@@ -1093,11 +1096,27 @@ function renderArchive() {
       esc(l.lostReason || (l.stage === 'Hired' ? 'Signed' : 'No reason recorded')) + '</div></div>' +
       '<div class="lead-signals"><div class="signal tiny muted">closed ' + esc(Fmt.ago(l.updatedAt)) + '</div></div>' +
       '<div class="lead-right"><span class="lead-value">' + esc(Fmt.money(l.value)) + '</span>' +
+      '<div class="row" style="gap:6px;justify-content:flex-end">' +
       (l.status === 'deleted'
         ? '<button class="btn btn-sm" data-act="restore-lead" data-id="' + esc(l.id) + '">Restore</button>'
         : '<button class="btn btn-sm" data-act="reopen-lead" data-id="' + esc(l.id) + '">Reopen</button>') +
-      '</div></article>';
-  }).join('') : emptyState('Archive is empty', 'Closed and deleted leads collect here. Nothing is ever removed for good.');
+      (canPurgeLeads() ? '<button class="btn btn-sm btn-ghost btn-icon danger-hover" data-act="v8-purge-lead" data-id="' + esc(l.id) + '" title="Delete for good">' + icon('trash', 13) + '</button>' : '') +
+      '</div></div></article>';
+  }).join('') : emptyState('Archive is empty', 'Won, lost and archived leads collect here. Restore them any time, or delete them for good.');
+
+  var acts = $('#archiveActions');
+  if (acts) {
+    acts.innerHTML = (deleted.length && canPurgeLeads())
+      ? '<button class="btn btn-danger" data-act="v8-empty-archive">' + icon('trash', 13) + ' Empty archive (' + deleted.length + ')</button>'
+      : '';
+  }
+}
+
+/** v8: deleting for good is for managers and admins of this account. */
+function canPurgeLeads() {
+  var p = State.perm;
+  if (!p) return true;
+  return p.del !== false && (p.level === 'admin' || !!p.manage);
 }
 
 /* ─── SETTINGS ──────────────────────────────────────────────────────────── */
@@ -1159,7 +1178,8 @@ function renderSettings() {
         '<div class="tiny muted" style="margin-top:10px">Your phone is covered by Telegram, which works whether this tab is open or not. The alarm here only fires while the dashboard is open.</div>') +
       chartCard('Top strip and ordering',
         '<div class="field"><label>Leads in the Recent strip</label>' +
-        '<input class="input" type="number" min="1" max="20" id="setRecentLimit" value="' + esc(s.recentLimit || 8) + '"/></div>' +
+        '<input class="input" type="number" min="1" max="60" id="setRecentLimit" value="' + esc(!s.recentLimit || s.recentLimit === 8 ? 30 : s.recentLimit) + '"/>' +
+        '<div class="tiny muted">Scroll the strip with the mouse wheel, drag it, or use the ‹ › arrows.</div></div>' +
         toggleHtml('setShowFlow', s.showFlowStrip !== false, 'Show the interaction counters across the top of Today', '') +
         '<button class="btn btn-sm" data-act="open-flow-config">Choose what they count</button>')
     ) +
@@ -1448,7 +1468,11 @@ function renderDrawerOverview(l) {
       '<button class="btn btn-sm" data-act="run-audit" data-id="' + esc(l.id) + '">' + icon('search', 13) + ' Audit site</button>' +
       '<button class="btn btn-sm" data-act="proposal-draft" data-id="' + esc(l.id) + '">' + icon('docs', 13) + ' Proposal</button>' +
       '<button class="btn btn-sm" data-act="lead-summary" data-id="' + esc(l.id) + '">' + icon('ai', 13) + ' Where it stands</button>' +
-      '<button class="btn btn-sm btn-danger" data-act="archive-lead" data-id="' + esc(l.id) + '">' + icon('trash', 13) + ' Archive</button>' +
+      (typeof v8CanMove === 'function' && v8CanMove() ? '<button class="btn btn-sm" data-act="v8-move-lead" data-id="' + esc(l.id) + '">' + icon('move', 13) + ' Move / copy</button>' : '') +
+      (l.status === 'deleted'
+        ? '<button class="btn btn-sm" data-act="restore-lead" data-id="' + esc(l.id) + '">Restore</button>'
+        : '<button class="btn btn-sm btn-danger" data-act="archive-lead" data-id="' + esc(l.id) + '">' + icon('archive', 13) + ' Archive</button>') +
+      (canPurgeLeads() ? '<button class="btn btn-sm btn-ghost danger-hover" data-act="v8-purge-lead" data-id="' + esc(l.id) + '" data-any="1">' + icon('trash', 13) + ' Delete forever</button>' : '') +
       '</div></div>';
 }
 

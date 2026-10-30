@@ -71,6 +71,9 @@
   <symbol id="ic-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
   <symbol id="ic-more" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></symbol>
   <symbol id="ic-sidebar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol>
+  <symbol id="ic-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.5-2.7 4"/><circle cx="12" cy="17.4" r=".6" fill="currentColor"/></symbol>
+  <symbol id="ic-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="10" height="16" rx="2"/><path d="M14 12h7M18 9l3 3-3 3"/></symbol>
+  <symbol id="ic-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/></symbol>
   <symbol id="ic-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
 </svg>
 
@@ -139,6 +142,7 @@
 <!-- ═══ APP ═══ -->
 <div class="app" id="app">
 
+  <div class="v8-update" id="v8Update" hidden></div>
   <header class="topbar">
     <div class="brand">
       <img class="brand-mark on-light" src="assets/img/mark.png" alt="Everstone Digital"/>
@@ -147,7 +151,11 @@
     </div>
     <button class="ws-switch" id="wsSwitch" hidden></button>
 
-    <div class="recent-strip" id="recentStrip"></div>
+    <div class="recent-wrap" id="recentWrap">
+      <button class="recent-arrow left" id="recentLeft" type="button" title="Earlier" hidden>‹</button>
+      <div class="recent-strip" id="recentStrip"></div>
+      <button class="recent-arrow right" id="recentRight" type="button" title="More" hidden>›</button>
+    </div>
     <div class="topbar-spacer"></div>
 
     <div class="sync" id="syncBadge" title="Sync status">
@@ -159,6 +167,7 @@
     <button class="btn btn-ghost btn-icon" id="btnSync" title="Sync now"><svg><use href="#ic-sync"/></svg></button>
     <button class="btn btn-ghost btn-icon" id="btnTheme" title="Light / dark">🌙</button>
     <button class="btn btn-primary" id="btnAddLead"><svg><use href="#ic-plus"/></svg><span class="label">Add lead</span></button>
+    <button class="btn btn-ghost btn-icon" id="btnHelp" title="Help — how to use this page (?)"><svg><use href="#ic-help"/></svg></button>
     <button class="me-btn" id="btnMe" title="Account"><span>·</span></button>
   </header>
 
@@ -181,11 +190,13 @@
       <button class="nav-item" data-page="messages"><span class="ico"><svg width="16" height="16"><use href="#ic-messages"/></svg></span><span class="label">Messages</span></button>
       <button class="nav-item" data-page="docs"><span class="ico"><svg width="16" height="16"><use href="#ic-docs"/></svg></span><span class="label">Documents</span><span class="badge" id="nb-docs">0</span></button>
       <button class="nav-item" data-page="archive"><span class="ico"><svg width="16" height="16"><use href="#ic-archive"/></svg></span><span class="label">Archive</span><span class="badge" id="nb-archive">0</span></button>
+      <button class="nav-item" data-page="guide"><span class="ico"><svg width="16" height="16"><use href="#ic-help"/></svg></span><span class="label">Guide</span></button>
 
       <div style="flex:1"></div>
       <button class="nav-item" data-page="admin" id="navAdmin" hidden><span class="ico"><svg width="16" height="16"><use href="#ic-shield"/></svg></span><span class="label">Admin</span><span class="badge" id="nb-admin">0</span></button>
       <button class="nav-item" data-page="settings"><span class="ico"><svg width="16" height="16"><use href="#ic-settings"/></svg></span><span class="label">Settings</span></button>
       <button class="nav-item nav-collapse" id="btnCollapse" title="Collapse the menu"><span class="ico"><svg width="16" height="16"><use href="#ic-sidebar"/></svg></span><span class="label">Collapse</span></button>
+      <button class="nav-version" id="navVersion" type="button" title="What’s new"></button>
     </nav>
     <div class="nav-shade" id="navShade"></div>
 
@@ -461,11 +472,17 @@
         <div class="page-head">
           <div>
             <h1 class="page-title">Archive</h1>
-            <p class="page-sub">Closed and deleted leads. Nothing here is gone — restore anything.</p>
+            <p class="page-sub">Won, lost and archived leads. Restore anything — or delete it for good.</p>
           </div>
+          <div class="page-actions" id="archiveActions"></div>
         </div>
         <div class="pill-row" id="archiveFilters" style="margin-bottom:14px"></div>
         <div class="lead-list" id="archiveList"></div>
+      </section>
+
+      <!-- GUIDE (v8) -->
+      <section class="page" id="page-guide">
+        <div id="guideRoot"></div>
       </section>
 
       <!-- NOTES -->
@@ -587,6 +604,8 @@
   <button class="btn btn-sm" id="bulkFollowup">Set follow-up</button>
   <button class="btn btn-sm" id="bulkStar">Star</button>
   <button class="btn btn-sm" id="bulkArchive">Archive</button>
+  <button class="btn btn-sm" id="bulkMove" hidden><svg><use href="#ic-move"/></svg> Move / copy</button>
+  <button class="btn btn-sm btn-danger" id="bulkPurge" hidden><svg><use href="#ic-trash"/></svg> Delete forever</button>
   <button class="btn btn-sm btn-icon" id="bulkClose" title="Clear"><svg><use href="#ic-x"/></svg></button>
 </div>
 
@@ -647,6 +666,7 @@
 <audio id="alarmAudio" preload="auto"></audio>
 
 <script src="assets/js/config.js"></script>
+<script src="assets/js/version.js"></script>
 <script src="assets/js/core.js"></script>
 <script src="assets/js/views.js"></script>
 <script src="assets/js/ai.js"></script>
@@ -654,6 +674,8 @@
 <script src="assets/js/platform.js"></script>
 <script src="assets/js/reports.js"></script>
 <script src="assets/js/booking.js"></script>
+<script src="assets/js/guide.js"></script>
+<script src="assets/js/v8.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>
 </html>
