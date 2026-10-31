@@ -486,8 +486,100 @@ var GUIDE = {
     {
       id: 'keys', icon: 'search',
       title: { en: 'Keyboard shortcuts', bn: 'Keyboard shortcut' },
-      en: ['N — add a lead', '/ — search leads', 'Ctrl+K — jump to anything', 'Ctrl+Z — undo', 'Esc — close what is open', '? — help for this page'],
-      bn: ['N — নতুন lead', '/ — lead খুঁজুন', 'Ctrl+K — যেকোনো জায়গায় যান', 'Ctrl+Z — undo', 'Esc — খোলা জিনিস বন্ধ', '? — এই page-এর help']
+      en: ['N — add a lead', '/ — search leads', 'Ctrl+K — jump to anything', 'Ctrl+Z — undo', 'Esc — close what is open', '? — help for this page',
+           'g then t / l / p / f / m / n / r / h / a / d / x / s / g / i — Today, Leads, Pipeline, Follow-ups, Meetings, Notes, Reports, History, AI, Documents, Archive, Settings, Guide, Admin',
+           'In a lead: type in "Log what just happened" and press Enter'],
+      bn: ['N — নতুন lead', '/ — lead খুঁজুন', 'Ctrl+K — যেকোনো জায়গায় যান', 'Ctrl+Z — undo', 'Esc — খোলা জিনিস বন্ধ', '? — এই page-এর help',
+           'g চেপে তারপর t / l / p / f / m / n / r / h / a / d / x / s / g / i — Today, Leads, Pipeline, Follow-ups, Meetings, Notes, Reports, History, AI, Documents, Archive, Settings, Guide, Admin',
+           'লিডের ভেতরে "Log what just happened"-এ লিখে Enter চাপুন']
+    },
+    {
+      id: 'deen', icon: 'book',
+      title: { en: 'Quran & Hadith panel', bn: 'কোরআন ও হাদিস' },
+      en: [
+        'On a big screen the right side shows an ayah and a hadith; on smaller screens press the book icon at the top.',
+        'A new one comes every 10 minutes and every time you open the dashboard. Change the time and topics with ⚙ in the panel.',
+        'Bangla first. Press English (or عربي for hadith) to switch. "তাফসীর দেখুন" opens the explanation.',
+        'The clock icon is the history: every ayah and hadith ever shown, with the time. Search it, star the ones you love, export them.',
+        'The words always come from the sources (alquran.cloud, quran.com, hadith-api) — nothing is written by AI.'
+      ],
+      bn: [
+        'বড় স্ক্রিনে ডান পাশে আয়াত ও হাদিস থাকে; ছোট স্ক্রিনে উপরের বই আইকনে চাপুন।',
+        'প্রতি ১০ মিনিটে আর প্রতিবার dashboard খুললে নতুন আসে। Panel-এর ⚙ থেকে সময় আর বিষয় বদলান।',
+        'আগে বাংলা। English (হাদিসে عربي) চাপলে ভাষা বদলায়। "তাফসীর দেখুন" চাপলে ব্যাখ্যা খোলে।',
+        'ঘড়ি আইকনে ইতিহাস: কখন কোন আয়াত/হাদিস দেখানো হয়েছিল, সব। খুঁজুন, ★ দিয়ে রাখুন, export করুন।',
+        'লেখা সবসময় উৎস থেকে আসে (alquran.cloud, quran.com, hadith-api) — AI দিয়ে কিছু বানানো হয় না।'
+      ]
+    },
+    {
+      id: 'notif', icon: 'bell',
+      title: { en: 'Notifications (the bell)', bn: 'Notification (ঘণ্টা)' },
+      en: [
+        'The bell at the top collects everything: problems, meetings about to start, follow-ups due, people asking for access, updates, and each ayah and hadith.',
+        'Tabs filter them. Click one to go straight to it. "Desktop-এও দেখাও" also shows meeting alerts outside the browser.'
+      ],
+      bn: [
+        'উপরের ঘণ্টায় সব জমা হয়: সমস্যা, শুরু হতে যাওয়া মিটিং, follow-up, access চাওয়া, update, আর প্রতিটা আয়াত ও হাদিস।',
+        'Tab দিয়ে ভাগ করুন। কোনোটায় চাপলে সরাসরি সেখানে যায়। "Desktop-এও দেখাও" চাপলে browser-এর বাইরেও মিটিংয়ের সতর্কতা আসে।'
+      ]
+    },
+    {
+      id: 'calendar', icon: 'meetings',
+      title: { en: 'Each account’s own Google Calendar', bn: 'প্রতিটা account-এর নিজের Google Calendar' },
+      en: [
+        'Settings → Calendar → "Connect Google Calendar", sign in with the Gmail you want (for example abc@gmail.com). Meetings of this account go there, and its busy times block double-booking and the booking page.',
+        'No Google client secret yet? Use "Use a shared calendar": share that calendar with the tracker’s Google account ("Make changes to events") and type the Gmail.',
+        'Every account has its own calendar. Nothing goes into the owner’s calendar unless the admin picks "Use the owner’s calendar".',
+        'Admin, once: Admin → Platform → add the Google client secret, then follow "Google sign-in check" (redirect URI, Calendar API, scope).'
+      ],
+      bn: [
+        'Settings → Calendar → "Connect Google Calendar", তারপর যে Gmail চান সেটা দিয়ে sign in করুন (যেমন abc@gmail.com)। এই account-এর মিটিং ওখানে যাবে, আর ওই calendar-এর busy সময়ে ডাবল বুকিং হবে না।',
+        'Google client secret না থাকলে "Use a shared calendar": ওই calendar-টা tracker-এর Google account-এর সাথে share করুন ("Make changes to events"), তারপর Gmail লিখুন।',
+        'প্রতিটা account-এর calendar আলাদা। Admin "Use the owner’s calendar" না বাছলে owner-এর calendar-এ কিছু যায় না।',
+        'Admin, একবার: Admin → Platform → Google client secret দিন, তারপর "Google sign-in check"-এর ধাপ মানুন (redirect URI, Calendar API, scope)।'
+      ]
+    },
+    {
+      id: 'reminders', icon: 'tg',
+      title: { en: 'Meeting reminders on Telegram', bn: 'Telegram-এ মিটিংয়ের রিমাইন্ডার' },
+      en: [
+        'Before every meeting, Telegram tells the people of that account: time, lead, phone, link, agenda — and the first reminder carries an AI brief from the lead’s notes.',
+        'Settings → Telegram → "Meeting reminders": choose 1 day / 2 h / 1 h / 30 / 15 / 10 / 5 minutes before, AI on or off, Bangla or English.',
+        'Open any meeting → "Send me a test reminder" to see it right now.'
+      ],
+      bn: [
+        'প্রতিটা মিটিংয়ের আগে Telegram ওই account-এর মানুষদের জানায়: সময়, লিড, ফোন, লিংক, এজেন্ডা — আর প্রথম রিমাইন্ডারে লিডের নোট থেকে AI প্রস্তুতি।',
+        'Settings → Telegram → "Meeting reminders": ১ দিন / ২ ঘণ্টা / ১ ঘণ্টা / ৩০ / ১৫ / ১০ / ৫ মিনিট আগে — বাছুন, AI চালু/বন্ধ, বাংলা বা English।',
+        'যেকোনো মিটিং খুলে "Send me a test reminder" চাপলে এখনই দেখতে পাবেন।'
+      ]
+    },
+    {
+      id: 'api', icon: 'link',
+      title: { en: 'API, webhooks, n8n and the Chrome extension', bn: 'API, webhook, n8n আর Chrome extension' },
+      en: [
+        'Settings → API & integrations: make a key, add a webhook (n8n, Make, Zapier), and follow the step-by-step for n8n and the Chrome extension.',
+        'Webhooks send lead.created, lead.updated, meeting.created and more as JSON the moment they happen, signed with your secret.',
+        'The admin decides who may use this: Admin → People → Access → Customize → "API & integrations". Switching it off stops that person’s keys at once.',
+        'AI providers the admin adds (Admin → AI providers) work for everyone automatically — nobody else sets anything up.'
+      ],
+      bn: [
+        'Settings → API & integrations: key বানান, webhook যোগ করুন (n8n, Make, Zapier), আর n8n ও Chrome extension-এর ধাপগুলো মানুন।',
+        'Webhook সাথে সাথে lead.created, lead.updated, meeting.created ইত্যাদি JSON আকারে পাঠায়, আপনার secret দিয়ে signed।',
+        'কে এটা ব্যবহার করবে admin ঠিক করেন: Admin → People → Access → Customize → "API & integrations"। বন্ধ করলে তার key সাথে সাথে বন্ধ হয়।',
+        'Admin যে AI provider যোগ করেন (Admin → AI providers), সেটা সবার জন্য নিজে থেকেই কাজ করে — কাউকে আলাদা setup করতে হয় না।'
+      ]
+    },
+    {
+      id: 'trash', icon: 'trash',
+      title: { en: 'Trash and deleting everything', bn: 'Trash আর সব কিছু মুছে ফেলা' },
+      en: [
+        'Archive page, bottom: Trash for deleted meetings, notes, tasks, documents and AI chats — Restore or delete for good, or "Empty trash (all)".',
+        'Admin → Accounts → "Empty" clears an account’s data but keeps its setup; the bin deletes the whole account; Admin → People → bin deletes a person with every trace (Telegram link, owned accounts, assignments).'
+      ],
+      bn: [
+        'Archive page-এর নিচে Trash: মুছে ফেলা মিটিং, নোট, task, document, AI chat — Restore বা একদম delete, বা "Empty trash (all)"।',
+        'Admin → Accounts → "Empty" দিলে account-এর ডেটা মুছে যায়, setup থাকে; bin দিলে পুরো account delete; Admin → People → bin দিলে person-এর সব চিহ্ন (Telegram link, account, assign) মুছে যায়।'
+      ]
     },
     {
       id: 'version', icon: 'history',

@@ -12,6 +12,9 @@
 <link rel="manifest" href="site.webmanifest"/>
 <meta name="apple-mobile-web-app-title" content="Everstone Leads"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&amp;display=swap"/>
 <link rel="stylesheet" href="assets/css/app.css"/>
 </head>
 <body>
@@ -74,6 +77,7 @@
   <symbol id="ic-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.5-2.7 4"/><circle cx="12" cy="17.4" r=".6" fill="currentColor"/></symbol>
   <symbol id="ic-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="10" height="16" rx="2"/><path d="M14 12h7M18 9l3 3-3 3"/></symbol>
   <symbol id="ic-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+  <symbol id="ic-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.5C10.3 5 7.8 4.3 4 4.5v13c3.8-.2 6.3.5 8 2 1.7-1.5 4.2-2.2 8-2v-13c-3.8-.2-6.3.5-8 2z"/><path d="M12 6.5v13"/></symbol>
   <symbol id="ic-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
 </svg>
 
@@ -167,6 +171,8 @@
     <button class="btn btn-ghost btn-icon" id="btnSync" title="Sync now"><svg><use href="#ic-sync"/></svg></button>
     <button class="btn btn-ghost btn-icon" id="btnTheme" title="Light / dark">🌙</button>
     <button class="btn btn-primary" id="btnAddLead"><svg><use href="#ic-plus"/></svg><span class="label">Add lead</span></button>
+    <button class="btn btn-ghost btn-icon" id="btnRail" title="Quran &amp; Hadith"><svg><use href="#ic-book"/></svg></button>
+    <button class="btn btn-ghost btn-icon bell-btn" id="btnBell" title="Notifications"><svg><use href="#ic-bell"/></svg><i class="bell-badge" id="bellBadge" hidden>0</i></button>
     <button class="btn btn-ghost btn-icon" id="btnHelp" title="Help — how to use this page (?)"><svg><use href="#ic-help"/></svg></button>
     <button class="me-btn" id="btnMe" title="Account"><span>·</span></button>
   </header>
@@ -584,6 +590,7 @@
       </section>
 
     </main>
+    <aside class="deen-rail" id="deenRail" aria-label="Quran and Hadith"></aside>
   </div>
 </div>
 
@@ -595,6 +602,9 @@
   <button class="mnav-item" data-page="followups"><svg><use href="#ic-followup"/></svg><span>Follow-ups</span><i class="mbadge" id="mnb-followups"></i></button>
   <button class="mnav-item" id="mnavMore"><svg><use href="#ic-more"/></svg><span>More</span></button>
 </nav>
+
+<div class="rail-shade" id="railShade"></div>
+<div class="notif-pop" id="notifPop" hidden></div>
 
 <!-- ═══ BULK ACTION BAR ═══ -->
 <div class="bulkbar" id="bulkbar">
@@ -676,6 +686,8 @@
 <script src="assets/js/booking.js"></script>
 <script src="assets/js/guide.js"></script>
 <script src="assets/js/v8.js"></script>
+<script src="assets/js/deen.js"></script>
+<script src="assets/js/v9.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>
 </html>

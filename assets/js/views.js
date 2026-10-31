@@ -780,7 +780,8 @@ function meetingCard(m) {
 /** Meetings land in Google Calendar automatically only in the main workspace. */
 function meetingInCalendar() {
   var c = (State.settings && State.settings.calendar) || {};
-  return (!State.ws || State.ws.id === 'main') && c.meetings !== false;
+  var link = (State.ws && State.ws.cal) || { mode: (!State.ws || State.ws.id === 'main') ? 'owner' : 'none' };
+  return link.mode !== 'none' && c.meetings !== false;
 }
 
 /** UTC instant for a wall-clock time in a time zone (no library needed). */
@@ -1144,6 +1145,9 @@ function renderSettings() {
   var b = brand();
   var mainWs = !State.ws || State.ws.id === 'main';
   var cal = s.calendar || {};
+  // v9: any account with a connected calendar gets the calendar options.
+  var calLink = (State.ws && State.ws.cal) || { mode: mainWs ? 'owner' : 'none' };
+  var calOn = calLink.mode !== 'none';
 
   function pane(name, html) {
     return '<div class="settings-pane" data-pane="' + name + '"' + (tab === name ? '' : ' hidden') + '><div class="chart-grid">' + html + '</div></div>';
@@ -1255,8 +1259,9 @@ function renderSettings() {
     pane('booking', '<div id="bookingSettings" class="card" style="grid-column:1/-1"><div class="card-body small muted">Loading…</div></div>') +
 
     pane('calendar',
+      '<div id="calLinkCard" class="card" style="grid-column:1/-1"><div class="card-body small muted">Checking the calendar…</div></div>' +
       chartCard('Follow-up reminders in Google Calendar',
-        (mainWs
+        (calOn
           ? '<div class="radio-list">' +
             [['free', 'All-day reminder marked “free”', 'Shows in your calendar but never blocks a booking page. Recommended.'],
              ['calendar', 'On a separate “Everstone Follow-ups” calendar', 'Keeps them out of your main calendar entirely. Also free.'],
@@ -1264,13 +1269,13 @@ function renderSettings() {
               return '<label class="radio-row"><input type="radio" name="setFollowCal" value="' + o[0] + '"' + ((cal.followups || 'free') === o[0] ? ' checked' : '') + '/>' +
                 '<span><b>' + esc(o[1]) + '</b><br/><span class="tiny muted">' + esc(o[2]) + '</span></span></label>';
             }).join('') + '</div>'
-          : '<div class="small muted">This workspace does not write to Google Calendar — meetings get an “Add to Google Calendar” button instead, so they land in your own calendar.</div>')) +
+          : '<div class="small muted">Connect a calendar above to add follow-ups to it. Until then meetings get an “Add to Google Calendar” button.</div>')) +
       chartCard('Meetings',
-        (mainWs
-          ? toggleHtml('setMeetCal', cal.meetings !== false, 'Put meetings in Google Calendar', 'At their exact time, with a 30-minute reminder.')
+        (calOn
+          ? toggleHtml('setMeetCal', cal.meetings !== false, 'Put meetings in the connected calendar', 'At their exact time, with a 30-minute reminder. Busy times there stop double-booking.')
           : '<div class="small muted">Use the Calendar button on any meeting.</div>') +
         '<div class="tiny muted" style="margin-top:8px">A cancelled or no-show meeting frees its slot again.</div>') +
-      (mainWs ? chartCard('Booking link closing whole days?',
+      (mainWs && calLink.mode === 'owner' ? chartCard('Booking link closing whole days?',
         '<div class="small" style="line-height:1.6">Older versions put every follow-up into your calendar as a <b>busy</b> all-day event, so booking pages treated the whole day as taken. ' +
         'This button marks every one of them <b>free</b>.</div>' +
         '<button class="btn btn-sm btn-primary" data-act="calendar-repair" style="margin-top:10px">Free up my booking days</button>' +

@@ -10,30 +10,30 @@
    number goes up, everyone sees "A new version is ready — Reload".
    ═══════════════════════════════════════════════════════════════════════════ */
 window.EVERSTONE_VERSION = {
-  version: '8.0',
-  build: 42,
-  date: '2026-10-30',
-  backend: '8.0',          // the Code.gs version this dashboard expects
+  version: '9.0',
+  build: 43,
+  date: '2026-10-31',
+  backend: '9.0',          // the Code.gs version this dashboard expects
   notes: {
     en: [
-      'The Recent strip at the top now scrolls — mouse wheel, drag, or the ‹ › arrows — and holds up to 30 leads.',
-      'The backend address is built in: nothing to paste after an update.',
-      'Delete for good: single leads, everything you select, or the whole archive.',
-      'Move or copy leads between accounts. People and accounts can be deleted from Admin.',
-      'Profile photo — tap your avatar, top right.',
-      'Guide page and a ? button on every page, in English and বাংলা, with AI answers.',
-      'Fixed: selecting text in a form no longer closes it. Google sign-in now explains any problem.',
-      'Calmer layout on big screens, better on phones.'
+      'Quran & Hadith on the right: a new ayah and hadith every few minutes (Bangla, English, Arabic, tafsir), with full history.',
+      'Notifications: the bell keeps every problem, meeting, follow-up and ayah in one place.',
+      'Each account books into its own Google Calendar — connect any Gmail in Settings → Calendar.',
+      'Telegram reminders before every meeting, with an AI brief from the lead’s notes.',
+      'Lead details: compact tiles, quick actions on top, and typed notes are never lost.',
+      'Trash for meetings, notes, tasks, documents and AI chats; admins can empty an account.',
+      'Webhooks for n8n / Make / Zapier; the admin decides who may use the API.',
+      'Faster admin console; g + a letter jumps to any page.'
     ],
     bn: [
-      'উপরের Recent strip এখন স্ক্রল হয় — mouse wheel, টেনে, বা ‹ › দিয়ে — আর ৩০টা পর্যন্ত lead দেখায়।',
-      'Backend link আগে থেকেই বসানো: update-এর পর কিছু paste করতে হয় না।',
-      'Lead একদম delete করা যায়: একটা, select করা সবগুলো, বা পুরো Archive খালি।',
-      'Lead এক account থেকে আরেক account-এ Move বা Copy। Admin থেকে person আর account delete।',
-      'Profile photo — উপরে ডানে নিজের ছবিতে চাপুন।',
-      'Guide page আর প্রতিটা page-এ ? বাটন — English ও বাংলায়, AI-কে প্রশ্নও করা যায়।',
-      'ঠিক করা হয়েছে: form-এ লেখা select করলে আর popup বন্ধ হয় না। Google sign-in-এ সমস্যা হলে কারণ দেখায়।',
-      'বড় স্ক্রিনে ফাঁকা জায়গা কম, মোবাইলে আরও সহজ।'
+      'ডান পাশে কোরআন ও হাদিস: কয়েক মিনিট পর পর নতুন আয়াত ও হাদিস (বাংলা, English, আরবি, তাফসীর), পুরো ইতিহাস সহ।',
+      'Notification (ঘণ্টা আইকন): সব সমস্যা, মিটিং, follow-up আর আয়াত এক জায়গায় জমা থাকে।',
+      'প্রতিটা account নিজের Google Calendar-এ মিটিং বুক করে — Settings → Calendar থেকে যেকোনো Gmail যুক্ত করুন।',
+      'প্রতিটা মিটিংয়ের আগে Telegram-এ রিমাইন্ডার, লিডের নোট থেকে AI প্রস্তুতি সহ।',
+      'লিডের details: ছোট ছোট বক্স, উপরে দ্রুত বাটন, আর লেখা নোট আর কখনো হারায় না।',
+      'মিটিং, নোট, task, document, AI chat-এর Trash; admin পুরো account খালি করতে পারেন।',
+      'n8n / Make / Zapier-এর জন্য webhook; কে API ব্যবহার করবে admin ঠিক করেন।',
+      'Admin দ্রুত খোলে; g চেপে একটা অক্ষর দিলে যেকোনো page-এ যাওয়া যায়।'
     ]
   }
 };

@@ -1,4 +1,4 @@
-# Everstone Lead Tracker — dashboard (v8.0 · build 42)
+# Everstone Lead Tracker — dashboard (v9.0 · build 43)
 
 The web dashboard for the Everstone Digital lead tracker. Static files only:
 open `index.html` and it runs. No build step, no npm, no framework.
@@ -19,6 +19,9 @@ assets/js/booking.js    the public booking page (index.html?book=<link name>)
 assets/js/version.js    the version number — add 1 to `build` on every release
 assets/js/guide.js      the words of the in-app Guide (English and Bangla)
 assets/js/v8.js         delete for good, move/copy, photos, Guide, help, updates
+assets/js/deen.js       Quran & Hadith panel: topics and references (texts come from the sources)
+assets/js/v9.js         Quran & Hadith panel, notifications, lead tiles, calendar links,
+                        meeting reminders, webhooks, trash, quick navigation
 assets/img/             logo and icons
 netlify.toml            headers and SPA routing for Netlify
 ```
@@ -142,3 +145,36 @@ dashboard expects (`backend` in version.js), admins see a yellow bar.
   and Admin → Platform → "Google sign-in check" lists what Google needs.
 - Reading pages are capped at a comfortable width on big screens; Pipeline
   and the AI chat still use the full screen.
+
+## v9 — what changed
+
+- **Quran & Hadith panel** on the right (a drawer on smaller screens): a new ayah
+  and hadith every 10 minutes and on every visit. Arabic, Bangla (Muhiuddin
+  Khan), English (Saheeh International), tafsir (Ahsanul Bayaan, Ibn Kathir,
+  Abu Bakr Zakaria, Fathul Majid), and hadith from Bukhari, Muslim and
+  Tirmidhi in Bangla / English / Arabic. Topics are weighted towards jihad,
+  taqwa and holding to the deen. Words always come from api.alquran.cloud,
+  api.quran.com and fawazahmed0/hadith-api — nothing is generated. History of
+  every item shown (search, star, export) stays on the device.
+- **Notifications** (the bell): problems, meetings starting, follow-ups due,
+  access requests, updates and every ayah/hadith, kept and searchable.
+- **Every account has its own Google Calendar.** Settings → Calendar:
+  "Connect Google Calendar" (OAuth, any Gmail), or "Use a shared calendar".
+  Meetings and follow-ups go there; its busy times block double-booking and
+  the booking page. Main keeps the owner's calendar until changed.
+  Needs, once: Admin → Platform → Google client secret, plus the redirect URI
+  and the Calendar API (see "Google sign-in check").
+- **Telegram meeting reminders with an AI brief**, at the minutes each account
+  chooses (Settings → Telegram). A new 5-minute schedule `meetingSweep` is
+  added by itself the first time an admin opens the Admin console.
+- **Lead details**: compact tiles, quick actions on top, "Log what just
+  happened" at the top (Enter saves). Fixed: a sync could wipe a half-typed
+  note — typing is never interrupted now, and drafts survive closing.
+- **Trash** for meetings, notes, tasks, documents and AI chats; Empty trash;
+  admins can empty an account; deleting a person removes their Telegram link,
+  assignments and ownerships too.
+- **Webhooks** (n8n / Make / Zapier), signed with HMAC-SHA256; per-person
+  "API & integrations" permission — switching it off stops their keys at once.
+- **Speed**: the admin console opens from its last copy and refreshes behind
+  it; account numbers are cached for 15 minutes.
+- **g + a letter** jumps to any page; more entries in Ctrl+K.

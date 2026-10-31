@@ -897,7 +897,8 @@ function accessEditorHtml(prefix, access) {
         '<div class="acc-sub">Also</div>' +
         '<label class="check-row"><input type="checkbox" class="acc-money"' + (e && e.money === false ? '' : ' checked') + '/> See deal values and pipeline money</label>' +
         '<label class="check-row"><input type="checkbox" class="acc-export"' + ((e && e.export !== undefined ? e.export : lv === 'manage') ? ' checked' : '') + '/> Export leads to CSV and take backups</label>' +
-        '<label class="check-row"><input type="checkbox" class="acc-del"' + ((e && e.del !== undefined ? e.del : lv !== 'view') ? ' checked' : '') + '/> Archive and merge leads</label>' +
+        '<label class="check-row"><input type="checkbox" class="acc-del"' + ((e && e.del !== undefined ? e.del : lv !== 'view') ? ' checked' : '') + '/> Archive, merge and delete</label>' +
+        '<label class="check-row"><input type="checkbox" class="acc-api"' + ((e && e.api !== undefined ? e.api : lv === 'manage') ? ' checked' : '') + '/> API &amp; integrations (keys, webhooks, n8n, Chrome extension)</label>' +
         '</div></div>';
     }).join('') + '</div>';
 }
@@ -915,6 +916,7 @@ function readAccessEditor(prefix) {
     if (!$('.acc-money', row).checked) e.money = false;
     e.export = $('.acc-export', row).checked;
     e.del = $('.acc-del', row).checked;
+    if ($('.acc-api', row)) e.api = $('.acc-api', row).checked;
     out[row.dataset.ws] = e;
   });
   return out;
@@ -931,8 +933,8 @@ function wireAccessEditor(prefix) {
     if (t.classList.contains('acc-on')) row.classList.toggle('on', t.checked);
     if (t.classList.contains('acc-level')) {
       $('.acc-help', row).textContent = LEVEL_HELP[t.value];
-      if (t.value === 'view') $('.acc-del', row).checked = false;
-      if (t.value === 'manage') { $('.acc-export', row).checked = true; $('.acc-del', row).checked = true; }
+      if (t.value === 'view') { $('.acc-del', row).checked = false; if ($('.acc-api', row)) $('.acc-api', row).checked = false; }
+      if (t.value === 'manage') { $('.acc-export', row).checked = true; $('.acc-del', row).checked = true; if ($('.acc-api', row)) $('.acc-api', row).checked = true; }
       if (!$('.acc-on', row).checked) { $('.acc-on', row).checked = true; row.classList.add('on'); }
     }
     if (!t.classList.contains('acc-on') && !t.classList.contains('acc-level') && !$('.acc-on', row).checked) {
@@ -1511,6 +1513,8 @@ function adminPlatformHtml() {
       '<option value="invite"' + (c.SIGNUP_POLICY === 'invite' ? ' selected' : '') + '>Invite only — nobody can ask</option></select></div>' +
       '<div class="field" style="margin-top:10px"><label>Google sign-in client ID</label><input class="input" id="cfgGoogle" value="' + esc(c.GOOGLE_CLIENT_ID || '') + '" placeholder="…apps.googleusercontent.com"/>' +
       '<div class="tiny muted">Add ' + esc(location.origin) + ' as an authorised JavaScript origin on that client.</div></div>' +
+      (owner ? '<div class="field" style="margin-top:10px"><label>Google client secret <span class="tiny muted">(for “Connect Google Calendar”)</span></label><input class="input" id="cfgGoogleSecret" value="' + esc(c.GOOGLE_CLIENT_SECRET || '') + '" placeholder="GOCSPX-…" autocomplete="off"/>' +
+        '<div class="tiny muted">Same OAuth client as above → “Client secret”. Lets each account connect its own Google Calendar.</div></div>' : '') +
       '<div class="field" style="margin-top:10px"><label>PageSpeed API key (optional, makes audits faster)</label><input class="input" id="cfgPsi" value="' + esc(c.PSI_KEY || '') + '"/></div>' +
       (owner ? '<div class="field" style="margin-top:10px"><label>Other admins (emails, comma separated)</label><input class="input" id="cfgAdmins" value="' + esc(c.ADMIN_EMAILS || '') + '"/></div>' +
         '<div class="field" style="margin-top:10px"><label>Owner password (for “Other ways to sign in”)</label><input class="input" id="cfgPw" value="' + esc(c.APP_PASSWORD || '') + '"/></div>' : '') +
@@ -1605,7 +1609,7 @@ function renderAccountBox() {
 var NOTIFY_KINDS = [
   ['digest', 'Morning summary', 'What is due today, every morning'],
   ['brief', 'AI morning brief', 'Who to contact first, with messages ready to send'],
-  ['reminders', 'Reminders', 'Follow-ups that come due, meetings 30 minutes before'],
+  ['reminders', 'Reminders', 'Follow-ups that come due, and meetings (times are set under “Meeting reminders” below)'],
   ['bookings', 'New bookings', 'Someone booked a call on your booking page'],
   ['weekly', 'Weekly review', 'Monday morning: how last week went'],
   ['monthly', 'Monthly report', 'On the 1st: last month’s leads, follow-ups, meetings and wins'],
@@ -1850,7 +1854,7 @@ Object.assign(ACTIONS, {
   'go-admin': function (el) {
     closeModal();
     if (el.dataset.value) { Admin.tab = el.dataset.value; try { localStorage.setItem('ev7_admin_tab', Admin.tab); } catch (e) {} }
-    if (el.dataset.value === 'people' || el.dataset.value === 'overview') adminLoad('ov', true);
+    if (el.dataset.value === 'people' || el.dataset.value === 'overview') adminLoad('ov');
     switchPage('admin');
   },
   'me-save-name': function () {
@@ -1944,6 +1948,7 @@ Object.assign(ACTIONS, {
   'cfg-save': function () {
     var c = { APP_URL: ($('#cfgAppUrl') || {}).value, BRAND_NAME: ($('#cfgBrand') || {}).value, AI_NAME: ($('#cfgAiName') || {}).value, SIGNUP_POLICY: ($('#cfgPolicy') || {}).value,
               GOOGLE_CLIENT_ID: ($('#cfgGoogle') || {}).value, PSI_KEY: ($('#cfgPsi') || {}).value };
+    if ($('#cfgGoogleSecret')) c.GOOGLE_CLIENT_SECRET = $('#cfgGoogleSecret').value;
     if ($('#cfgAdmins')) c.ADMIN_EMAILS = $('#cfgAdmins').value;
     if ($('#cfgPw')) c.APP_PASSWORD = $('#cfgPw').value;
     api('adminSaveConfig', { config: c }).then(function (r) {

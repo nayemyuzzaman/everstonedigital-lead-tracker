@@ -648,7 +648,7 @@ function renderCmdk(query) {
     { label: 'Show leads with no next step', kind: 'filter', run: function () {
       State.ui.filters.health = 'nonext'; switchPage('leads');
     } }
-  ];
+  ].concat(typeof v9Commands === 'function' ? v9Commands() : []);
 
   commands.forEach(function (c) {
     if (!q || c.label.toLowerCase().indexOf(q) >= 0) results.push(c);
